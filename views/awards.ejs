@@ -1,0 +1,76 @@
+<%- include('partials/head', { title: 'Primary Certificates of Recognition' }) %>
+<div class="page-head">
+  <h1>Primary Certificates of Recognition</h1>
+</div>
+<% if (errors.length) { %><div class="alert alert-error"><ul class="plain-list"><% errors.forEach(function(e){ %><li><%= e %></li><% }) %></ul></div><% } %>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Topic title</h2>
+    <p class="muted">Shown in gold above the table - what this week&#39;s certificates are for, e.g.
+    <em>&quot;Generosity of Spirit Certificate Winners 12.12.25&quot;</em>.</p>
+    <form method="post" action="/awards/topic">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <label>Title
+        <input type="text" name="title" value="<%= topic %>" maxlength="160" placeholder="Generosity of Spirit Certificate Winners 12.12.25">
+      </label>
+      <button class="btn btn-primary">Save title</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Add a class</h2>
+    <p class="muted">Anyone on the staff can add rows: the class (or group) and the winning students&#39; names.
+    Each new issue starts with a fresh table; you can fix or remove the rows you added yourself.</p>
+    <form method="post" action="/awards">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="field-row">
+        <label>Class * <input type="text" name="class_name" required maxlength="120" placeholder="e.g. Year 3W"></label>
+        <label>Students * <input type="text" name="students" required maxlength="200" placeholder="e.g. Marta, Renee"></label>
+      </div>
+      <button class="btn btn-primary">Add to the table</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <% if (!rows.length) { %>
+    <p class="muted">No rows for this issue yet - the Primary Certificates of Recognition block only appears in the newsletter once
+    at least one class is added.</p>
+  <% } else { %>
+  <table class="table">
+    <thead><tr><th>Class</th><th>Students</th><th>Added by</th><th></th></tr></thead>
+    <tbody>
+      <% rows.forEach(function(r) { %>
+        <tr>
+          <% if (r.canEdit) { %>
+          <td colspan="2">
+            <form method="post" action="/awards/<%= r.id %>" class="inline-form">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <input type="text" name="class_name" value="<%= r.grade_stage %>" required maxlength="120" style="width:120px">
+              <input type="text" name="students" value="<%= r.student_name %>" required maxlength="200" style="width:240px">
+              <button class="btn btn-ghost btn-sm">Save</button>
+            </form>
+            <% if (r.week_start !== issueWeek) { %><span class="tag tag-pending">next week's issue</span><% } %>
+          </td>
+          <% } else { %>
+          <td><%= r.grade_stage %></td>
+          <td><%= r.student_name %>
+            <% if (r.week_start !== issueWeek) { %><br><span class="tag tag-pending">next week's issue</span><% } %>
+          </td>
+          <% } %>
+          <td class="muted"><%= r.author || '-' %></td>
+          <td class="row-actions">
+            <% if (r.canEdit) { %>
+            <form method="post" action="/awards/<%= r.id %>/delete" data-confirm="Remove this class from the rewards table?">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button class="btn btn-danger btn-sm">Delete</button>
+            </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+<%- include('partials/foot') %>

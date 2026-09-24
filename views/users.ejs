@@ -1,0 +1,237 @@
+<%- include('partials/head', { title: 'Users' }) %>
+<div class="page-head">
+  <h1>Staff accounts</h1>
+  <div class="page-actions"><a class="btn btn-primary" href="/users/new">+ Add user</a></div>
+</div>
+<% if (created) { %><div class="alert alert-ok">User created - share the login details with them.</div><% } %>
+
+<% if (locals.importReport) { %>
+  <div class="alert alert-ok">
+    <strong>Import finished:</strong> <%= importReport.created.length %> account(s) created,
+    <%= importReport.existing.length %> already existed (left untouched),
+    <%= importReport.invalid.length %> line(s) skipped as invalid.
+  </div>
+  <% if (importReport.created.length) { %>
+    <div class="card"><h2>Created (no password yet - send invites below)</h2>
+      <table class="table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Area</th></tr></thead><tbody>
+        <% importReport.created.forEach(function(u) { %>
+          <tr><td><%= u.name %></td><td><%= u.email %></td><td><%= u.role %></td><td><%= u.section ? (sections[u.section] || u.section) : '-' %></td></tr>
+        <% }) %>
+      </tbody></table>
+    </div>
+  <% } %>
+  <% if (importReport.invalid.length) { %>
+    <div class="alert alert-warn"><strong>Skipped lines:</strong> <%= importReport.invalid.join(' · ') %></div>
+  <% } %>
+<% } %>
+
+<% if (locals.inviteResult) { %>
+  <% if (inviteResult.sent) { %>
+    <div class="alert alert-ok">
+      <strong>Invitations sent to <%= inviteResult.sentTo.length %> staff member(s).</strong>
+      Each email carries a personal &quot;Create your password&quot; link.
+      <% if (inviteResult.failed && inviteResult.failed.length) { %>
+        <br>⚠ Could not reach: <%= inviteResult.failed.map(function(f){ return f.email + ' (' + f.error + ')'; }).join('; ') %>
+      <% } %>
+    </div>
+  <% } else { %>
+    <div class="alert alert-error"><strong>No invitations were sent:</strong> <%= inviteResult.reason %></div>
+  <% } %>
+<% } %>
+
+<% if (locals.roleReport) { %>
+  <div class="alert alert-ok">
+    <strong>Roles updated:</strong> <%= roleReport.updated.length %> account(s) changed<%= roleReport.updated.length ? ' (' + roleReport.updated.join(', ') + ')' : '' %>.
+    <% if (roleReport.missing.length) { %><br>Not found (no account with this email): <%= roleReport.missing.join(', ') %><% } %>
+  </div>
+  <% if (roleReport.invalid.length) { %>
+    <div class="alert alert-warn"><strong>Skipped lines:</strong> <%= roleReport.invalid.join(' · ') %></div>
+  <% } %>
+<% } %>
+
+<% if (locals.deleteReport) { %>
+  <div class="alert alert-ok">
+    <strong><%= deleteReport.deleted %> account(s) deleted.</strong>
+    <% if (deleteReport.skipped.length) { %>
+      Skipped (admin/principal accounts and your own row are never bulk-deleted): <%= deleteReport.skipped.join(', ') %>
+    <% } %>
+  </div>
+<% } %>
+
+<% if (locals.isSiteAdmin) { %>
+<div class="grid-2">
+  <div class="card">
+    <h2>Import staff</h2>
+    <p class="muted">Paste (or choose a file with) one person per line: <code>Name,email</code> - optionally
+    <code>Name,email,role,area</code> (role: staff / slt / marketing / principal / admin; area for SLT:
+    whole_school / foundation / primary / secondary / sixth_form / co_curricular). Header rows and duplicates are skipped,
+    and <strong>existing accounts are never modified</strong>. Imported accounts have no password until their
+    owner activates them through the invitation email.</p>
+    <form method="post" action="/users/import">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <label>CSV file <input type="file" id="csv-file" accept=".csv,text/csv,text/plain"></label>
+      <label>Rows to import
+        <textarea name="csv" id="csv-text" rows="6" placeholder="Nino Beridze,n.beridze@bga.ge&#10;Samuel Murray,s.murray@bga.ge,slt,secondary"></textarea>
+      </label>
+      <button class="btn btn-primary" data-confirm="Create accounts for every new email in the list? Nobody can log in until they set a password through their invitation email.">Import accounts</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Invitation emails</h2>
+    <p class="muted">Each invitation is a branded Mailchimp email with a <strong>personal login link</strong>: the
+    recipient opens it, creates a password, and lands in the dashboard. <strong><%= newInvites %></strong> account(s)
+    have never been emailed; <strong><%= pendingInvites %></strong> still have no password overall. The main button
+    only emails people who have <em>never</em> received an invite, so already-invited staff are not emailed again.
+    Use the reminder button (or the per-row buttons below) to re-send - a re-send replaces the earlier link.</p>
+    <form method="post" action="/users/send-invites" data-confirm="Email a personal login link to every account that has never been invited yet?" class="inline-form">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <input type="hidden" name="scope" value="new">
+      <button class="btn btn-primary" <%= newInvites ? '' : 'disabled' %>>Send invites to <%= newInvites %> new</button>
+    </form>
+    <form method="post" action="/users/send-invites" data-confirm="Re-send an invitation to EVERY account still without a password, including people already emailed? Their earlier links stop working." class="inline-form">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <input type="hidden" name="scope" value="all">
+      <button class="btn btn-ghost" <%= pendingInvites ? '' : 'disabled' %>>Re-send reminders to all <%= pendingInvites %> not activated</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Fix roles in bulk</h2>
+    <p class="muted">Importing never changes existing accounts, so a person created as <code>staff</code> by an
+    earlier list stays staff even if a later list says <code>slt</code>. Paste <code>email, role, area</code>
+    lines here (full <code>Name, email, role, area</code> import lines work too) and the listed accounts get
+    exactly that role - e.g. <code>s.murray@bga.ge, slt, secondary</code>. An SLT member with no area checks
+    every area.</p>
+    <form method="post" action="/users/set-roles">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <label>Role list
+        <textarea name="lines" rows="5" placeholder="n.beridze@bga.ge, slt&#10;Samuel Murray, s.murray@bga.ge, slt, secondary"></textarea>
+      </label>
+      <button class="btn btn-primary">Update roles</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Import staff photos in bulk</h2>
+    <p class="muted">Got a folder or zip of staff photos? Unzip it, select all the files on the import page, and
+    each photo is <strong>matched to a person by its file name</strong> and saved as their headshot - ready to
+    pick in the article form. Photos are shrunk in your browser first, so even gigabytes upload in minutes.</p>
+    <a class="btn btn-secondary" href="/users/headshots">Open the photo import</a>
+  </div>
+  <div class="card">
+    <h2>Email list for Mailchimp</h2>
+    <p class="muted">Every account's email, one per line, straight from the live database - open it, select all,
+    and paste into your Mailchimp audience. It always reflects the current list, including people you have
+    added or removed here.</p>
+    <a class="btn btn-secondary" href="/users/export.txt" target="_blank" rel="noopener">Open email list (.txt)</a>
+  </div>
+  <div class="card">
+    <h2>Remove old staff</h2>
+    <p class="muted">Tick the rows of people who have left in the table below, then delete them all at once.
+    Admin and principal accounts (and your own) are never bulk-deleted. Deleting an account does not delete
+    the stories that person wrote.</p>
+    <form method="post" action="/users/bulk-delete" id="bulk-delete-form" data-confirm="Delete every ticked account? This cannot be undone.">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn btn-danger">Delete ticked accounts</button>
+    </form>
+  </div>
+</div>
+<% } %>
+<div class="card">
+  <p class="muted"><span class="tag tag-approved">✓ active</span> = has created their password and can sign in
+  (<strong><%= users.filter(function(u){ return !u.invited; }).length %></strong> of <%= users.length %>);
+  <span class="tag tag-pending">✉</span> = still waiting on them. Times are Georgian time.
+  <strong>Headshot:</strong> save each person&#39;s portrait once here and it appears in the article form&#39;s
+  &quot;section head&quot; dropdown - staff pick the person instead of re-uploading the same photo every week.</p>
+  <table class="table">
+    <thead><tr><% if (locals.isSiteAdmin) { %><th></th><% } %><th>Name</th><th>Headshot</th><th>Email</th><th>Role &amp; area</th><th>Reset password</th><th></th></tr></thead>
+    <tbody>
+      <% users.forEach(function(u) { %>
+        <tr>
+          <% if (locals.isSiteAdmin) { %>
+          <td><% if (u.id !== currentUser.id && !['admin','principal'].includes(u.role)) { %><input type="checkbox" name="ids" value="<%= u.id %>" form="bulk-delete-form" aria-label="select <%= u.name %>"><% } %></td>
+          <% } %>
+          <td><%= u.name %>
+            <% if (u.invited) { %>
+              <br><span class="tag tag-pending">✉ <%= u.invite_sent_at ? 'invited ' + fmtWhen(u.invite_sent_at) + ' - waiting' : 'no invite emailed yet' %></span>
+            <% } else { %>
+              <br><span class="tag tag-approved">✓ active</span>
+              <span class="muted" style="font-size:12px">
+                <%= u.activated_at ? 'password set ' + fmtWhen(u.activated_at) : '' %><%= u.last_login_at ? (u.activated_at ? ' · ' : '') + 'last login ' + fmtWhen(u.last_login_at) : '' %>
+              </span>
+            <% } %>
+          </td>
+          <td>
+            <% if (u.headshot) { %>
+              <img src="/uploads/<%= u.headshot %>" alt="<%= u.name %>" style="width:44px;height:44px;object-fit:cover;border-radius:50%;display:block;margin-bottom:4px;">
+            <% } %>
+            <form method="post" action="/users/<%= u.id %>/headshot" enctype="multipart/form-data" class="inline-form">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <input type="file" name="headshot" accept="image/jpeg,image/png,image/webp,image/gif" style="max-width:170px;">
+              <button class="btn btn-ghost btn-sm">Save</button>
+              <% if (u.headshot) { %>
+                <label class="muted" style="font-size:12px"><input type="checkbox" name="remove_headshot" value="1"> remove</label>
+              <% } %>
+            </form>
+          </td>
+          <td><%= u.email %></td>
+          <td>
+            <form method="post" action="/users/<%= u.id %>/role" class="inline-form">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <select name="role" class="slot-select">
+                <% assignableRoles.concat(assignableRoles.includes(u.role) ? [] : [u.role]).forEach(function(r) { %>
+                  <option value="<%= r %>" <%= u.role === r ? 'selected' : '' %>><%= r %></option>
+                <% }) %>
+              </select>
+              <select name="section" class="slot-select">
+                <option value="">- all areas -</option>
+                <% sectionKeys.forEach(function(k) { %>
+                  <option value="<%= k %>" <%= u.section === k ? 'selected' : '' %>><%= sections[k] %></option>
+                <% }) %>
+              </select>
+              <button class="btn btn-ghost btn-sm">Set</button>
+            </form>
+            <span class="muted"><%= roleLabels[u.role] || u.role %></span>
+            <form method="post" action="/users/<%= u.id %>/word-limit" class="inline-form" style="margin-top:4px">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <input type="hidden" name="unlimited" value="<%= u.no_word_limit ? '0' : '1' %>">
+              <% if (u.no_word_limit) { %><span class="tag tag-approved">no word cap</span><% } %>
+              <button class="btn btn-ghost btn-sm"><%= u.no_word_limit ? 'Restore 100-word cap' : 'Lift word cap' %></button>
+            </form>
+          </td>
+          <td>
+            <form method="post" action="/users/<%= u.id %>/password" class="inline-form">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <input type="password" name="password" placeholder="new password (8+)" minlength="8" required>
+              <button class="btn btn-ghost btn-sm">Set</button>
+            </form>
+          </td>
+          <td class="row-actions">
+            <% if (locals.isSiteAdmin && u.invited) { %>
+            <form method="post" action="/users/<%= u.id %>/invite" class="inline-form" <%- u.invite_sent_at ? 'data-confirm="Re-send the invitation email to this person? Their earlier link stops working."' : '' %>>
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button class="btn btn-ghost btn-sm"><%= u.invite_sent_at ? 'Re-send invite' : 'Send invite' %></button>
+            </form>
+            <% } %>
+            <% if (u.id !== currentUser.id) { %>
+            <form method="post" action="/users/<%= u.id %>/delete" data-confirm="Delete this account?">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button class="btn btn-danger btn-sm">Delete</button>
+            </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<div class="card card-narrow">
+  <h2>Change my password</h2>
+  <form method="post" action="/account/password">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="field-row">
+      <label>Current password <input type="password" name="current_password" required></label>
+      <label>New password (8+) <input type="password" name="password" minlength="8" required></label>
+    </div>
+    <button class="btn btn-primary">Change password</button>
+  </form>
+</div>
+<%- include('partials/foot') %>

@@ -1,0 +1,70 @@
+// Cron scheduling for the three automated jobs, in the school's timezone:
+//  - Monday reminder to fill in content (only when auto reminders are on)
+//  - Hard-deadline reminder to those who have not submitted (same toggle)
+//  - Generation (default Thursday 18:00): aggregation + Mailchimp draft,
+//    then a review email to the configured newsletter editor(s)
+const cron = require('node-cron');
+const { getSetting } = require('./db');
+const reminders = require('./reminders');
+const { generateIssue } = require('./generate');
+
+let jobs = [];
+
+function schedule(expr, tz, name, fn) {
+  if (!cron.validate(expr)) {
+    console.error(`[scheduler] Invalid cron expression for ${name}: "${expr}" - job not scheduled.`);
+    return;
+  }
+  const task = cron.schedule(
+    expr,
+    async () => {
+      console.log(`[scheduler] Running job: ${name}`);
+      try {
+        const result = await fn();
+        if (result && result.reason) console.log(`[scheduler] ${name}: ${result.reason}`);
+      } catch (err) {
+        console.error(`[scheduler] Job ${name} failed:`, err);
+      }
+    },
+    { timezone: tz }
+  );
+  jobs.push(task);
+  console.log(`[scheduler] Scheduled ${name}: "${expr}" (${tz})`);
+}
+
+function start() {
+  stop();
+  const tz = getSetting('timezone');
+  schedule(getSetting('monday_reminder_cron'), tz, 'monday-reminder', () => reminders.sendMondayReminder());
+  schedule(getSetting('thursday_reminder_cron'), tz, 'thursday-deadline-reminder', () =>
+    reminders.sendThursdayReminder()
+  );
+  schedule(getSetting('friday_generate_cron'), tz, 'generate-draft', async () => {
+    const result = await generateIssue({ trigger: 'cron' });
+    // The editor reviews the assembled draft (curate articles, then send
+    // from Mailchimp) - tell them it is ready.
+    const notify = await reminders.sendEditorNotification(result);
+    if (!notify.sent) console.log(`[scheduler] Editor review email not sent: ${notify.reason}`);
+    return result;
+  });
+}
+
+function stop() {
+  // destroy() (node-cron v4) also removes the task from the global registry;
+  // stop() alone would leak stopped tasks on every settings-triggered restart.
+  for (const job of jobs) {
+    Promise.resolve(job.destroy ? job.destroy() : job.stop()).catch((err) =>
+      console.error('[scheduler] Failed to destroy job:', err)
+    );
+  }
+  jobs = [];
+}
+
+// Called after settings are saved so new cron expressions take effect
+// without a restart.
+function restart() {
+  console.log('[scheduler] Restarting scheduled jobs with updated settings.');
+  start();
+}
+
+module.exports = { start, stop, restart };

@@ -1,0 +1,110 @@
+<%- include('partials/head', { title: 'News' }) %>
+<div class="page-head">
+  <h1>News articles</h1>
+  <div class="page-actions"><a class="btn btn-primary" href="/news/new">+ Add news</a></div>
+</div>
+<% if (olderCount > 0 || showAll) { %>
+  <p class="muted">
+    <% if (showAll) { %>
+      Showing <strong>all stories, including past weeks</strong>.
+      <a href="/news">Hide older stories</a>
+    <% } else { %>
+      Showing the <strong>current issue and upcoming stories</strong> - <%= olderCount %> older stor<%= olderCount === 1 ? 'y is' : 'ies are' %> hidden.
+      <a href="/news?all=1">Show older stories</a>
+    <% } %>
+  </p>
+<% } %>
+<p class="muted">Anyone on the staff can write a story for any area. The <strong>SLT member responsible for that area</strong> checks it, and only checked stories go into the newsletter.<% if (isManager) { %> Marketing then decides what makes this week's issue (<strong>Included</strong>) and where it sits in the template (D/F/H = left column, E/G/I = right column). Sections A-C are fixed: header &amp; quote, upcoming events, principal's message.<% } %></p>
+<div class="card">
+  <table class="table">
+    <thead><tr><th>Title</th><th>Area</th><th>SLT check</th><th>Template section</th><th>Included</th><th>Photos</th><th>Week</th><th>By</th><th></th></tr></thead>
+    <tbody>
+      <% rows.forEach(function(n) { %>
+        <tr class="<%= n.week_start === weekStart ? 'row-current' : '' %> <%= n.included && n.review_status === 'approved' ? '' : 'row-excluded' %>">
+          <td><%= n.title %></td>
+          <td><span class="tag tag-<%= n.section %>"><%= sectionLabels[n.section] || n.section.replace('_',' ') %></span></td>
+          <td>
+            <% if (n.review_status === 'approved') { %>
+              <span class="tag tag-approved">✅ checked</span>
+            <% } else if (n.review_status === 'rejected') { %>
+              <span class="tag tag-rejected">🚫 sent back</span>
+            <% } else { %>
+              <span class="tag tag-pending">⏳ awaiting check</span>
+            <% } %>
+            <% if (n.reviewer) { %><br><span class="muted"><%= n.reviewer %></span><% } %>
+            <% if (n.review_note) { %><br><span class="muted">“<%= n.review_note %>”</span><% } %>
+            <% if (n.canReview) { %>
+              <div class="btn-row btn-row-tight">
+                <% if (n.review_status !== 'approved') { %>
+                  <form method="post" action="/news/<%= n.id %>/review" class="inline-form">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <input type="hidden" name="decision" value="approved">
+                    <button class="btn btn-primary btn-sm">Approve</button>
+                  </form>
+                <% } %>
+                <% if (n.review_status !== 'rejected') { %>
+                  <form method="post" action="/news/<%= n.id %>/review" class="inline-form" data-confirm="Send this story back to its author?">
+                    <input type="hidden" name="_csrf" value="<%= csrf %>">
+                    <input type="hidden" name="decision" value="rejected">
+                    <input type="text" name="review_note" placeholder="reason (optional)" maxlength="500" class="input-sm">
+                    <button class="btn btn-danger btn-sm">Send back</button>
+                  </form>
+                <% } %>
+              </div>
+            <% } %>
+          </td>
+          <td>
+            <% if (isManager) { %>
+              <form method="post" action="/news/<%= n.id %>/slot" class="inline-form">
+                <input type="hidden" name="_csrf" value="<%= csrf %>">
+                <select name="slot" class="slot-select">
+                  <% slotsFor(n.section).concat(slotsFor(n.section).includes(n.slot) ? [] : [n.slot]).forEach(function(s) { %>
+                    <option value="<%= s %>" <%= n.slot === s ? 'selected' : '' %>><%= slotLabels[s] %></option>
+                  <% }) %>
+                </select>
+                <button class="btn btn-ghost btn-sm">Set</button>
+              </form>
+            <% } else { %>
+              <span class="tag tag-slot"><%= n.slot %></span>
+            <% } %>
+          </td>
+          <td>
+            <% if (isManager) { %>
+              <form method="post" action="/news/<%= n.id %>/include">
+                <input type="hidden" name="_csrf" value="<%= csrf %>">
+                <input type="hidden" name="included" value="<%= n.included ? '0' : '1' %>">
+                <button class="btn btn-sm <%= n.included ? 'btn-ghost' : 'btn-danger' %>"><%= n.included ? '✅ in - exclude' : '🚫 out - include' %></button>
+              </form>
+            <% } else { %>
+              <%= n.included ? '✅' : '🚫 excluded' %>
+            <% } %>
+          </td>
+          <td><%= n.photo_count %> 📷</td>
+          <td>
+            <% if (n.week_start === issueWeek) { %>
+              <span class="tag tag-approved">this week's issue</span>
+            <% } else if (n.week_start === weekStart) { %>
+              <span class="tag tag-pending">next week's issue</span>
+            <% } else if (n.week_start > issueWeek) { %>
+              <span class="tag tag-pending">upcoming · <%= n.week_start %></span>
+            <% } else { %>
+              <span class="tag tag-admin">past · week of <%= n.week_start %></span>
+            <% } %>
+          </td>
+          <td class="muted"><%= n.author || '-' %></td>
+          <td class="row-actions">
+            <% if ((locals.can && can.manage) || n.created_by === currentUser.id) { %>
+              <a class="btn btn-ghost btn-sm" href="/news/<%= n.id %>/edit">Edit</a>
+              <form method="post" action="/news/<%= n.id %>/delete" data-confirm="Delete this article and its photos?">
+                <input type="hidden" name="_csrf" value="<%= csrf %>">
+                <button class="btn btn-danger btn-sm">Delete</button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+      <% if (!rows.length) { %><tr><td colspan="9" class="muted">No news yet - add the first article!</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+<%- include('partials/foot') %>

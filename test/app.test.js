@@ -1,0 +1,1858 @@
+// End-to-end smoke test against a real listening server with a throwaway
+// database. Environment must be set before any src module is required.
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'bga-test-'));
+process.env.SESSION_SECRET = 'test-secret';
+process.env.ADMIN_EMAIL = 'admin@test.local';
+process.env.ADMIN_PASSWORD = 'test-password';
+// Empty strings (not delete) so dotenv cannot re-populate them from .env.
+process.env.MAILCHIMP_API_KEY = '';
+process.env.MAILCHIMP_SERVER_PREFIX = '';
+process.env.MAILCHIMP_AUDIENCE_ID = '';
+process.env.MAILCHIMP_TEACHERS_AUDIENCE_ID = '';
+
+const test = require('node:test');
+const assert = require('node:assert');
+const { seedAdmin, db, setSetting } = require('../src/db');
+const { createApp } = require('../src/app');
+const { generateIssue } = require('../src/generate');
+const { palette } = require('../src/brand');
+
+let server;
+let base;
+let cookies = '';
+let csrf = '';
+
+function mergeCookies(res) {
+  const set = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
+  if (set.length) {
+    const jar = new Map(cookies.split('; ').filter(Boolean).map((c) => [c.split('=')[0], c]));
+    for (const c of set) jar.set(c.split('=')[0], c.split(';')[0]);
+    cookies = [...jar.values()].join('; ');
+  }
+}
+
+async function get(url) {
+  const res = await fetch(base + url, { headers: { cookie: cookies }, redirect: 'manual' });
+  mergeCookies(res);
+  return res;
+}
+
+async function post(url, params) {
+  const body = new URLSearchParams({ _csrf: csrf, ...params });
+  const res = await fetch(base + url, {
+    method: 'POST',
+    headers: { cookie: cookies, 'content-type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+    redirect: 'manual',
+  });
+  mergeCookies(res);
+  return res;
+}
+
+async function extractCsrf(html) {
+  const m = html.match(/name="_csrf" value="([^"]+)"/);
+  return m ? m[1] : '';
+}
+
+test.before(async () => {
+  seedAdmin();
+  // Pin the generation cutoff to Sunday 23:59 so the submission week and the
+  // generation week agree throughout the run - with the real Thursday-18:00
+  // default, a suite run on a Thursday evening or weekend would post stories
+  // into next week while previews/generation target this week.
+  setSetting('friday_generate_cron', '59 23 * * 7');
+  const app = createApp();
+  await new Promise((resolve) => {
+    server = app.listen(0, () => resolve());
+  });
+  base = `http://127.0.0.1:${server.address().port}`;
+});
+
+test.after(() => {
+  server.close();
+  fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true });
+});
+
+test('unauthenticated user is redirected to login', async () => {
+  const res = await get('/');
+  assert.strictEqual(res.status, 302);
+  assert.strictEqual(res.headers.get('location'), '/login');
+});
+
+test('login page renders and sets a CSRF token', async () => {
+  const res = await get('/login');
+  assert.strictEqual(res.status, 200);
+  csrf = await extractCsrf(await res.text());
+  assert.ok(csrf.length >= 32);
+});
+
+test('login rejects wrong credentials', async () => {
+  const res = await post('/login', { email: 'admin@test.local', password: 'wrong' });
+  assert.strictEqual(res.status, 401);
+});
+
+test('login rejects a bad CSRF token', async () => {
+  const saved = csrf;
+  csrf = 'forged';
+  const res = await post('/login', { email: 'admin@test.local', password: 'test-password' });
+  assert.strictEqual(res.status, 403);
+  csrf = saved;
+});
+
+test('login succeeds with correct credentials', async () => {
+  const res = await post('/login', { email: 'admin@test.local', password: 'test-password' });
+  assert.strictEqual(res.status, 302);
+  assert.strictEqual(res.headers.get('location'), '/');
+  const dash = await get('/');
+  assert.strictEqual(dash.status, 200);
+  const html = await dash.text();
+  assert.match(html, /This week's issue/);
+  csrf = await extractCsrf(html);
+});
+
+test('admin can create an event', async () => {
+  const res = await post('/events', {
+    title: 'Test Sports Day',
+    event_date: '2030-05-10',
+    end_date: '',
+    time_note: 'All Day',
+    location: 'Big Pitch',
+  });
+  assert.strictEqual(res.status, 302);
+  const list = await get('/events');
+  assert.match(await list.text(), /Test Sports Day/);
+});
+
+test('event validation rejects a bad date', async () => {
+  const res = await post('/events', { title: 'Bad', event_date: '2030-02-31' });
+  assert.strictEqual(res.status, 400);
+});
+
+test('bulk event paste adds a whole calendar, skips duplicates and bad lines', async () => {
+  const lines = [
+    '2030-09-08 | Welcome to Early Years coffee morning, with Mrs Hughes | Primary Canteen | 08:45-09:30',
+    '2030-09-22 | Welcome to Primary - virtual meeting | Online | 2:30-3:25',
+    '2030-10-05..2030-10-07 | Autumn Camp | Kazbegi | All day',
+    'not-a-date | Broken line',
+    '2030-09-08 | Welcome to Early Years coffee morning, with Mrs Hughes | Primary Canteen | 08:45-09:30',
+  ].join('\n');
+  const res = await post('/events/import', { lines });
+  assert.strictEqual(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /3 event\(s\) added/);
+  assert.match(html, /1 already existed/);
+  assert.match(html, /Skipped lines:.*not-a-date/);
+  const camp = db.prepare("SELECT * FROM events WHERE title = 'Autumn Camp'").get();
+  assert.strictEqual(camp.event_date, '2030-10-05');
+  assert.strictEqual(camp.end_date, '2030-10-07');
+  assert.strictEqual(camp.location, 'Kazbegi');
+  // titles keep their commas - the separator is the pipe
+  const coffee = db.prepare("SELECT * FROM events WHERE event_date = '2030-09-08'").get();
+  assert.strictEqual(coffee.title, 'Welcome to Early Years coffee morning, with Mrs Hughes');
+  assert.strictEqual(coffee.time_note, '08:45-09:30');
+  // re-pasting the same list adds nothing
+  const again = await post('/events/import', { lines });
+  assert.match(await again.text(), /0 event\(s\) added/);
+  db.prepare("DELETE FROM events WHERE event_date LIKE '2030-09%' OR title = 'Autumn Camp'").run();
+});
+
+test('admin can create a news article without photos', async () => {
+  const res = await post('/news', {
+    title: 'Big Tennis Win',
+    body: 'We won.\n\nEveryone celebrated.',
+    section: 'primary',
+  });
+  assert.strictEqual(res.status, 302);
+  const list = await get('/news');
+  assert.match(await list.text(), /Big Tennis Win/);
+});
+
+test('article text over 100 words is rejected', async () => {
+  const longBody = Array.from({ length: 101 }, (_, i) => `word${i}`).join(' ');
+  const res = await post('/news', { title: 'Too Long', body: longBody, section: 'primary' });
+  assert.strictEqual(res.status, 400);
+  const list = await get('/news');
+  assert.ok(!(await list.text()).includes('Too Long'));
+});
+
+test('admin can exclude an article from the issue and re-include it', async () => {
+  const list = await get('/news');
+  const html = await list.text();
+  const id = html.match(/\/news\/(\d+)\/include/)[1];
+  await post(`/news/${id}/include`, { included: '0' });
+  let preview = await (await get('/newsletter/preview.html')).text();
+  assert.ok(!preview.includes('Big Tennis Win'), 'excluded article must leave the issue');
+  await post(`/news/${id}/include`, { included: '1' });
+  preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /Big Tennis Win/);
+});
+
+test('placement: the area sets the default, but any section is choosable', async () => {
+  const list = await get('/news');
+  const id = (await list.text()).match(/\/news\/(\d+)\/slot/)[1]; // Big Tennis Win, primary
+  // moves within the left column are fine...
+  const res = await post(`/news/${id}/slot`, { slot: 'F' });
+  assert.strictEqual(res.status, 302);
+  // ...and so are the right column and the bands - only unknown slots fail.
+  assert.strictEqual((await post(`/news/${id}/slot`, { slot: 'E' })).status, 302);
+  assert.strictEqual((await post(`/news/${id}/slot`, { slot: 'Z' })).status, 400);
+  await post(`/news/${id}/slot`, { slot: 'D' });
+
+  // A manager's explicit pick on the create form is honoured even outside
+  // the area's own column; without a pick, the area's default applies.
+  await post('/news', { title: 'Coerce Check', body: 'x', section: 'primary', slot: 'G' });
+  assert.strictEqual(db.prepare("SELECT slot FROM news WHERE title = 'Coerce Check'").get().slot, 'G');
+  await post('/news', { title: 'Band Check', body: 'x', section: 'sixth_form' });
+  assert.strictEqual(db.prepare("SELECT slot FROM news WHERE title = 'Band Check'").get().slot, 'X');
+  db.prepare("DELETE FROM news WHERE title IN ('Coerce Check', 'Band Check')").run();
+});
+
+test('preview shows placeholders for empty template sections; drafts do not', async () => {
+  const preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /SECTION F/);
+  const { generateIssue } = require('../src/generate');
+const { palette } = require('../src/brand');
+  const result = await generateIssue({ trigger: 'test-placeholders' });
+  assert.ok(!/SECTION [A-I]/.test(result.html), 'generated issue must not contain placeholder boxes');
+});
+
+test('live editor: edit mode annotates the preview; drafts and plain previews stay clean', async () => {
+  const edit = await (await get('/newsletter/preview.html?edit=1')).text();
+  assert.match(edit, /data-edit="news:\d+:title"/);
+  assert.match(edit, /preview-editor\.js/);
+  assert.match(edit, /data-max-words="100"/, 'the live editor is told the current word limit');
+  const plain = await (await get('/newsletter/preview.html')).text();
+  assert.ok(!plain.includes('data-edit='), 'plain preview must not carry editor markup');
+  const result = await generateIssue({ trigger: 'test-editor-clean' });
+  assert.ok(!result.html.includes('data-edit='), 'draft must not carry editor markup');
+  assert.ok(!result.html.includes('preview-editor.js'), 'draft must not carry the editor script');
+});
+
+async function apiJson(url, payload) {
+  const res = await fetch(base + url, {
+    method: 'POST',
+    headers: { cookie: cookies, 'content-type': 'application/json', 'x-csrf-token': csrf },
+    body: JSON.stringify(payload),
+  });
+  return { status: res.status, body: await res.json() };
+}
+
+test('live editor API: inline text edits persist and are validated', async () => {
+  const edit = await (await get('/newsletter/preview.html?edit=1')).text();
+  const newsId = edit.match(/data-edit="news:(\d+):title"/)[1];
+
+  const ok = await apiJson('/api/edit/text', { target: `news:${newsId}:title`, value: 'Edited Inline Title' });
+  assert.strictEqual(ok.status, 200);
+  assert.match(await (await get('/newsletter/preview.html')).text(), /Edited Inline Title/);
+
+  const empty = await apiJson('/api/edit/text', { target: `news:${newsId}:title`, value: '   ' });
+  assert.strictEqual(empty.status, 400);
+
+  const long = await apiJson('/api/edit/text', {
+    target: `news:${newsId}:body`,
+    value: Array.from({ length: 101 }, (_, i) => `w${i}`).join(' '),
+  });
+  assert.strictEqual(long.status, 400);
+  assert.match(long.body.error, /100 words/);
+
+  const unknown = await apiJson('/api/edit/text', { target: 'news:999999:title', value: 'x' });
+  assert.strictEqual(unknown.status, 404);
+  const badTarget = await apiJson('/api/edit/text', { target: 'users:1:email', value: 'x' });
+  assert.strictEqual(badTarget.status, 400);
+
+  await apiJson('/api/edit/text', { target: `news:${newsId}:title`, value: 'Big Tennis Win' });
+});
+
+test('live editor API: photo add, replace and delete', async () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  const edit = await (await get('/newsletter/preview.html?edit=1')).text();
+  const newsId = edit.match(/data-edit="news:(\d+):title"/)[1];
+
+  const upload = async (url, fields) => {
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
+    form.append('photo', new Blob([png], { type: 'image/png' }), 'inline.png');
+    const res = await fetch(base + url, {
+      method: 'POST',
+      headers: { cookie: cookies, 'x-csrf-token': csrf },
+      body: form,
+    });
+    return { status: res.status, body: await res.json() };
+  };
+
+  const added = await upload('/api/edit/photo/add', { news_id: newsId });
+  assert.strictEqual(added.status, 200);
+  let preview = await (await get('/newsletter/preview.html?edit=1')).text();
+  const photoId = preview.match(/data-photo="(\d+)"/)[1];
+
+  const replaced = await upload('/api/edit/photo/replace', { photo_id: photoId });
+  assert.strictEqual(replaced.status, 200);
+
+  const deleted = await apiJson('/api/edit/photo/delete', { photo_id: photoId });
+  assert.strictEqual(deleted.status, 200);
+  preview = await (await get('/newsletter/preview.html?edit=1')).text();
+  assert.ok(!preview.includes(`data-photo="${photoId}"`));
+});
+
+test('live editor API rejects teachers and bad CSRF', async () => {
+  const noCsrf = await fetch(base + '/api/edit/text', {
+    method: 'POST',
+    headers: { cookie: cookies, 'content-type': 'application/json' },
+    body: JSON.stringify({ target: 'news:1:title', value: 'x' }),
+  });
+  assert.strictEqual(noCsrf.status, 403);
+});
+
+test('generate button shows a step-by-step report of the Mailchimp outcome', async () => {
+  const res = await post('/newsletter/generate', {});
+  assert.strictEqual(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /Generation report/);
+  assert.match(html, /No draft was created in Mailchimp/);
+  assert.match(html, /Mailchimp API key/);
+  assert.match(html, /MAILCHIMP_API_KEY \/ MAILCHIMP_SERVER_PREFIX missing/);
+  assert.match(html, /Content collected/);
+});
+
+test('newsletter preview renders submitted content', async () => {
+  const res = await get('/newsletter/preview.html');
+  assert.strictEqual(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /BGA NEWSLETTER/);
+  assert.match(html, /Test Sports Day/);
+  assert.match(html, /Big Tennis Win/);
+});
+
+test('teacher accounts are restricted from admin pages', async () => {
+  await post('/users', {
+    name: 'Terry Teacher',
+    email: 'terry@test.local',
+    role: 'primary',
+    password: 'terry-pass-123',
+  });
+  // log in as the teacher in a separate cookie jar (merged by cookie name)
+  const jarMap = new Map();
+  const absorb = (res) =>
+    (res.headers.getSetCookie() || []).forEach((c) => jarMap.set(c.split('=')[0], c.split(';')[0]));
+  const jarStr = () => [...jarMap.values()].join('; ');
+
+  const loginPage = await fetch(base + '/login');
+  absorb(loginPage);
+  const teacherCsrf = await extractCsrf(await loginPage.text());
+  const login = await fetch(base + '/login', {
+    method: 'POST',
+    headers: { cookie: jarStr(), 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: teacherCsrf, email: 'terry@test.local', password: 'terry-pass-123' }).toString(),
+    redirect: 'manual',
+  });
+  absorb(login);
+  const jar = jarStr();
+  assert.strictEqual(login.status, 302);
+
+  const users = await fetch(base + '/users', { headers: { cookie: jar }, redirect: 'manual' });
+  assert.strictEqual(users.status, 403);
+  const settings = await fetch(base + '/settings', { headers: { cookie: jar }, redirect: 'manual' });
+  assert.strictEqual(settings.status, 403);
+  const principal = await fetch(base + '/principal-message', { headers: { cookie: jar }, redirect: 'manual' });
+  assert.strictEqual(principal.status, 403);
+});
+
+test('multipart requests cannot bypass CSRF protection', async () => {
+  const form = new FormData();
+  form.append('title', 'x');
+  const res = await fetch(base + '/newsletter/generate', {
+    method: 'POST',
+    headers: { cookie: cookies },
+    body: form,
+    redirect: 'manual',
+  });
+  assert.strictEqual(res.status, 403);
+});
+
+test('multipart posts to news routes without a token are rejected after parsing', async () => {
+  const form = new FormData();
+  form.append('title', 'x');
+  form.append('body', 'y');
+  form.append('section', 'primary');
+  const res = await fetch(base + '/news', {
+    method: 'POST',
+    headers: { cookie: cookies },
+    body: form,
+    redirect: 'manual',
+  });
+  assert.strictEqual(res.status, 403);
+});
+
+test('multipart requests succeed with the CSRF token in the form body', async () => {
+  const form = new FormData();
+  form.append('_csrf', csrf);
+  form.append('title', 'Multipart Article');
+  form.append('body', 'Uploaded via multipart form.');
+  form.append('section', 'secondary');
+  const res = await fetch(base + '/news', {
+    method: 'POST',
+    headers: { cookie: cookies },
+    body: form,
+    redirect: 'manual',
+  });
+  assert.strictEqual(res.status, 302);
+  const list = await get('/news');
+  assert.match(await list.text(), /Multipart Article/);
+});
+
+test('a file that is not really an image is rejected by content sniffing', async () => {
+  const form = new FormData();
+  form.append('_csrf', csrf);
+  form.append('title', 'Fake Photo Article');
+  form.append('body', 'Trying to upload a script as an image.');
+  form.append('section', 'primary');
+  form.append('photos', new Blob(['<script>alert(1)</script>'], { type: 'image/png' }), 'evil.png');
+  const res = await fetch(base + '/news', {
+    method: 'POST',
+    headers: { cookie: cookies },
+    body: form,
+    redirect: 'manual',
+  });
+  assert.strictEqual(res.status, 400);
+  await new Promise((r) => setTimeout(r, 200)); // file cleanup is async
+  const uploads = fs.readdirSync(path.join(process.env.DATA_DIR, 'uploads'));
+  assert.strictEqual(uploads.length, 0, 'rejected upload must be removed from disk');
+});
+
+test('a real PNG upload is accepted and served', async () => {
+  // 1×1 transparent PNG
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  const form = new FormData();
+  form.append('_csrf', csrf);
+  form.append('title', 'Real Photo Article');
+  form.append('body', 'With an actual image.');
+  form.append('section', 'whole_school');
+  form.append('photos', new Blob([png], { type: 'image/png' }), 'pixel.png');
+  const res = await fetch(base + '/news', {
+    method: 'POST',
+    headers: { cookie: cookies },
+    body: form,
+    redirect: 'manual',
+  });
+  assert.strictEqual(res.status, 302);
+  const uploads = fs.readdirSync(path.join(process.env.DATA_DIR, 'uploads'));
+  assert.strictEqual(uploads.length, 1);
+  const served = await fetch(base + '/uploads/' + uploads[0], { headers: { cookie: '' } });
+  assert.strictEqual(served.status, 200);
+  assert.strictEqual(served.headers.get('cross-origin-resource-policy'), 'cross-origin');
+});
+
+test('principal message accepts a portrait photo shown in the preview', async () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  const form = new FormData();
+  form.append('_csrf', csrf);
+  form.append('body', 'Dear Parents,\n\nA short test message.');
+  form.append('quote', 'Test quote');
+  form.append('quote_author', 'Tester');
+  form.append('photo', new Blob([png], { type: 'image/png' }), 'principal.png');
+  const res = await fetch(base + '/principal-message', {
+    method: 'POST',
+    headers: { cookie: cookies },
+    body: form,
+    redirect: 'manual',
+  });
+  assert.strictEqual(res.status, 302);
+  const preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /alt="Principal"/);
+  assert.match(preview, /Test quote/);
+});
+
+test('preview falls back gracefully on a garbage ?week parameter', async () => {
+  const res = await get('/newsletter/preview.html?week=garbage');
+  assert.strictEqual(res.status, 200);
+  assert.match(await res.text(), /BGA NEWSLETTER/);
+});
+
+test('an ongoing multi-day event stays in the newsletter after its start date', async () => {
+  await post('/events', {
+    title: 'Ongoing Book Fair',
+    event_date: '2000-01-01',
+    end_date: '2099-12-31',
+    time_note: '',
+    location: 'Library',
+  });
+  const res = await get('/newsletter/preview.html');
+  assert.match(await res.text(), /Ongoing Book Fair/);
+});
+
+test('login throttles after repeated failures', async () => {
+  const loginPage = await fetch(base + '/login');
+  const jar = (loginPage.headers.getSetCookie() || []).map((c) => c.split(';')[0]).join('; ');
+  const tok = await extractCsrf(await loginPage.text());
+  let last;
+  for (let i = 0; i < 11; i++) {
+    last = await fetch(base + '/login', {
+      method: 'POST',
+      headers: { cookie: jar, 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ _csrf: tok, email: 'bruteforce@test.local', password: 'nope' }).toString(),
+      redirect: 'manual',
+    });
+  }
+  assert.strictEqual(last.status, 429);
+});
+
+test('generateIssue works without Mailchimp and records warnings', async () => {
+  const result = await generateIssue({ trigger: 'test' });
+  assert.strictEqual(result.status, 'local_only');
+  assert.ok(result.warnings.some((w) => /Mailchimp is not configured/.test(w)));
+  assert.match(result.html, /BGA NEWSLETTER/);
+  const row = db.prepare('SELECT * FROM issues WHERE week_start = ?').get(result.weekStart);
+  assert.ok(row, 'issue row stored');
+});
+
+test('issues page lists the generated issue', async () => {
+  const res = await get('/newsletter/issues');
+  const html = await res.text();
+  assert.match(html, /saved locally only/);
+});
+
+test('demo fill populates every template section and is admin-only', async () => {
+  // A teacher must not be able to trigger it.
+  const teacherRes = await fetch(base + '/demo-data/fill', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: 'x' }).toString(),
+    redirect: 'manual',
+  });
+  assert.ok([302, 403].includes(teacherRes.status), 'unauthenticated fill is refused');
+
+  const res = await post('/demo-data/fill', {});
+  assert.strictEqual(res.status, 302);
+  assert.strictEqual(res.headers.get('location'), '/newsletter/preview?demo=filled');
+
+  const preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /Inter-School Friendly Tennis Tournament Success/);
+  assert.match(preview, /Duke of Edinburgh Expedition/);
+  assert.match(preview, /PCA Meeting/);
+  assert.ok(!/SECTION [WDEXY]/.test(preview), 'every dedicated section shows demo content');
+  const bandSlots = db.prepare("SELECT slot, COUNT(*) AS c FROM news WHERE is_demo = 1 GROUP BY slot ORDER BY slot").all();
+  assert.deepStrictEqual(
+    bandSlots.map((r) => `${r.slot}:${r.c}`),
+    ['D:1', 'E:1', 'W:2', 'X:1', 'Y:1'],
+    'demo stories sit in their dedicated sections'
+  );
+
+  // Demo photo files really exist and are served.
+  const photo = db
+    .prepare("SELECT p.filename FROM photos p JOIN news n ON n.id = p.news_id WHERE n.is_demo = 1 LIMIT 1")
+    .get();
+  assert.ok(photo, 'demo photos inserted');
+  const img = await get(`/uploads/${photo.filename}`);
+  assert.strictEqual(img.status, 200);
+
+  const demoNews = db.prepare('SELECT COUNT(*) AS c FROM news WHERE is_demo = 1').get().c;
+  assert.strictEqual(demoNews, 6, 'six demo articles across the dedicated sections');
+});
+
+test('demo fill is idempotent and never touches real content', async () => {
+  const realNews = db.prepare('SELECT COUNT(*) AS c FROM news WHERE is_demo = 0').get().c;
+  await post('/demo-data/fill', {});
+  await post('/demo-data/fill', {});
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS c FROM news WHERE is_demo = 1').get().c, 6, 'refilling replaces, not duplicates');
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS c FROM events WHERE is_demo = 1').get().c, 6);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS c FROM news WHERE is_demo = 0').get().c, realNews, 'real articles untouched');
+});
+
+test('demo clear removes only demo rows and their files', async () => {
+  const files = db
+    .prepare('SELECT p.filename FROM photos p JOIN news n ON n.id = p.news_id WHERE n.is_demo = 1')
+    .all()
+    .map((r) => r.filename);
+  assert.ok(files.length > 0);
+  const realNews = db.prepare('SELECT COUNT(*) AS c FROM news WHERE is_demo = 0').get().c;
+
+  const res = await post('/demo-data/clear', {});
+  assert.strictEqual(res.status, 302);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS c FROM news WHERE is_demo = 1').get().c, 0);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS c FROM events WHERE is_demo = 1').get().c, 0);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS c FROM principal_messages WHERE is_demo = 1').get().c, 0);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS c FROM news WHERE is_demo = 0').get().c, realNews, 'real articles survive the clear');
+  for (const f of files) {
+    assert.ok(!fs.existsSync(path.join(process.env.DATA_DIR, 'uploads', f)), `demo photo file ${f} deleted`);
+  }
+});
+
+test('masthead background: settings upload renders in the preview; a real one survives demo fill/clear', async () => {
+  const { getSetting } = require('../src/db');
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+    'base64'
+  );
+  const form = new FormData();
+  form.append('_csrf', csrf);
+  form.append('masthead', new Blob([png], { type: 'image/png' }), 'banner.png');
+  const res = await fetch(base + '/settings/masthead-photo', {
+    method: 'POST',
+    headers: { cookie: cookies },
+    body: form,
+    redirect: 'manual',
+  });
+  assert.strictEqual(res.status, 302);
+
+  const settingsPage = await (await get('/settings')).text();
+  assert.match(settingsPage, /Remove background image/);
+
+  const preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /class="mast-pad" background="/);
+  assert.match(preview, /background-image:url\('[^']*\/uploads\/[^']+'\)/);
+
+  const editPreview = await (await get('/newsletter/preview.html?edit=1')).text();
+  assert.match(editPreview, /data-masthead="1"/);
+  assert.ok(!editPreview.includes('data-no-bg'), 'edit mode knows a background is set');
+
+  // Demo fill must not replace the manager's own masthead, and demo clear
+  // must not delete it.
+  await post('/demo-data/fill', {});
+  assert.notStrictEqual(getSetting('masthead_is_demo'), '1');
+  await post('/demo-data/clear', {});
+  assert.ok(getSetting('masthead_photo'), 'real masthead survives demo clear');
+
+  // Removing it through the live-editor API returns the header to plain navy.
+  const del = await fetch(base + '/api/edit/masthead-photo/delete', {
+    method: 'POST',
+    headers: { cookie: cookies, 'content-type': 'application/json', 'x-csrf-token': csrf },
+    body: '{}',
+  });
+  assert.strictEqual((await del.json()).ok, true);
+  const preview2 = await (await get('/newsletter/preview.html')).text();
+  assert.ok(!preview2.includes('background-image:url'));
+});
+
+test('demo fill adds a masthead background when none is set; clear removes it again', async () => {
+  const { getSetting } = require('../src/db');
+  await post('/demo-data/fill', {});
+  assert.strictEqual(getSetting('masthead_is_demo'), '1');
+  const preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /background-image:url/);
+  await post('/demo-data/clear', {});
+  assert.ok(!getSetting('masthead_photo'), 'demo masthead removed');
+  assert.notStrictEqual(getSetting('masthead_is_demo'), '1');
+});
+
+test('preview uses relative /uploads and /fonts URLs so images load on any host', async () => {
+  await post('/demo-data/fill', {});
+  const preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /src="\/uploads\//, 'photos are relative in the preview');
+  assert.match(preview, /url\('\/fonts\/FiraGO-/, 'fonts are relative in the preview');
+  assert.ok(!preview.includes('http://localhost:3000/uploads/'), 'no absolute localhost image links in the preview');
+  await post('/demo-data/clear', {});
+});
+
+test('generation report flags a non-public APP_BASE_URL', async () => {
+  const result = await generateIssue({ trigger: 'test' });
+  const baseStep = result.steps.find((s) => s.label.includes('APP_BASE_URL'));
+  assert.ok(baseStep, 'report includes the public-URL step');
+  assert.strictEqual(baseStep.ok, false, 'localhost base is flagged');
+  assert.match(baseStep.detail, /Set APP_BASE_URL/);
+  // The draft itself still uses absolute URLs (email clients need them).
+  assert.match(result.html, /url\('http:\/\/localhost:3000\/fonts\/FiraGO-/);
+});
+
+
+test('article form preview endpoint renders the draft with links and photos', async () => {
+  const res = await fetch(base + '/news/preview.html', {
+    method: 'POST',
+    headers: { cookie: cookies, 'content-type': 'application/json', 'x-csrf-token': csrf },
+    body: JSON.stringify({
+      title: 'Form Preview Test',
+      body: 'Read [more](https://bga.ge) now',
+      sectionLabel: 'whole school',
+      photos: ['data:image/png;base64,AAAA', 'javascript:alert(1)'],
+    }),
+  });
+  assert.strictEqual(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /Form Preview Test/);
+  assert.match(html, /<a href="https:\/\/bga\.ge"/);
+  assert.match(html, /data:image\/png;base64,AAAA/);
+  assert.ok(!html.includes('javascript:alert'));
+  // requires login
+  const anon = await fetch(base + '/news/preview.html', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+    redirect: 'manual',
+  });
+  assert.ok([302, 403].includes(anon.status));
+});
+
+test('pasted links become hyperlinks: Google Drive without https, and in event notes', async () => {
+  // Protocol-less Drive/Docs/forms links and parenthesised URLs in article
+  // text all resolve to working anchors.
+  const res = await fetch(base + '/news/preview.html', {
+    method: 'POST',
+    headers: { cookie: cookies, 'content-type': 'application/json', 'x-csrf-token': csrf },
+    body: JSON.stringify({
+      title: 'Drive Links',
+      body: 'Please see the attached guide for helpful sleeping tips at home.\n\ndrive.google.com/file/d/abc123/view?usp=sharing\nIf you have not ordered yet, please complete this form: https://forms.gle/frm1.\nSign up (see https://forms.gle/xyz).',
+      sectionLabel: 'whole school',
+    }),
+  });
+  const html = await res.text();
+  // The link moves INTO the words the sentence already uses...
+  assert.match(html, /<a href="https:\/\/drive\.google\.com\/file\/d\/abc123\/view\?usp=sharing"[^>]*>the attached guide<\/a>/);
+  assert.match(html, /<a href="https:\/\/forms\.gle\/frm1"[^>]*>this form<\/a>/);
+  // ...with no nearby phrase it falls back to a short service label, and the
+  // trailing ")." stays out of the URL.
+  assert.match(html, /<a href="https:\/\/forms\.gle\/xyz"[^>]*>Open the form&nbsp;&rsaquo;<\/a>/);
+  assert.ok(!html.includes('href="https://forms.gle/xyz)'));
+  assert.ok(!/>https?:\/\//.test(html), 'raw URL text never shows in the article');
+
+  // A Drive link pasted into an event's note is clickable in the newsletter.
+  await post('/events', {
+    title: 'Trip Photos Day',
+    event_date: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+    time_note: 'Album: https://drive.google.com/drive/folders/evnt42',
+  });
+  const preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /<a href="https:\/\/drive\.google\.com\/drive\/folders\/evnt42"[^>]*>Album<\/a>/);
+  db.prepare("DELETE FROM events WHERE title = 'Trip Photos Day'").run();
+});
+
+test('Foundation stories are single-column, in the right column beside Primary', async () => {
+  // The area appears in the news form dropdown and maps to the right column.
+  const form = await (await get('/news/new')).text();
+  assert.match(form, /<option value="foundation"[^>]*>Foundation<\/option>/);
+  assert.match(form, /data-slots="W,D,E,F,G,H,I,X,Y"/, 'every content section is choosable');
+  // ...a Foundation story lands at the top of the right column by default...
+  await post('/news', { title: 'Foundation Sandpit News', body: 'Little ones had fun.', section: 'foundation' });
+  const row = db.prepare("SELECT * FROM news WHERE title = 'Foundation Sandpit News'").get();
+  assert.strictEqual(row.slot, 'E');
+  // ...and can be moved into ANY section - the area only sets the default.
+  assert.strictEqual((await post(`/news/${row.id}/slot`, { slot: 'D' })).status, 302);
+  assert.strictEqual((await post(`/news/${row.id}/slot`, { slot: 'Q' })).status, 400, 'unknown sections still refused');
+  assert.strictEqual((await post(`/news/${row.id}/slot`, { slot: 'G' })).status, 302);
+  // ...and renders inside the columns area, above the Whole School band.
+  const preview = await (await get('/newsletter/preview.html')).text();
+  const idx = preview.indexOf('Foundation Sandpit News');
+  assert.ok(idx > -1, 'foundation story renders');
+  assert.ok(!preview.includes('SECTION V'), 'the old full-width V band is gone');
+  // The W band holds 'Real Photo Article' (whole_school) from an earlier
+  // test - the Foundation story must render before it in the source.
+  const wIdx = preview.indexOf('Real Photo Article');
+  assert.ok(wIdx > -1 && wIdx > idx, 'the Foundation story sits above the Whole School band');
+  db.prepare("DELETE FROM news WHERE title = 'Foundation Sandpit News'").run();
+});
+
+test('band articles get wide photos; head-of-grade portrait sits at the top; 4-photo cap', async () => {
+  const sharp = require('sharp');
+  const png = (w, h, bg) => sharp({ create: { width: w, height: h, channels: 3, background: bg } }).png().toBuffer();
+  const mp = async (url, fields, files) => {
+    const form = new FormData();
+    form.append('_csrf', csrf);
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
+    for (const [name, buf, fname] of files) form.append(name, new Blob([buf], { type: 'image/png' }), fname);
+    const res = await fetch(base + url, { method: 'POST', headers: { cookie: cookies }, body: form, redirect: 'manual' });
+    return res;
+  };
+
+  // A Whole School story (band W) with a head photo and three content photos.
+  const img = await png(800, 600, '#336699');
+  const res = await mp(
+    '/news',
+    { title: 'Band Photo Story', body: 'Wide photos please.', section: 'whole_school' },
+    [
+      ['lead_photo', await png(300, 400, '#993333'), 'head.png'],
+      ['photos', img, 'a.png'],
+      ['photos', img, 'b.png'],
+      ['photos', img, 'c.png'],
+    ]
+  );
+  assert.strictEqual(res.status, 302);
+  const story = db.prepare("SELECT * FROM news WHERE title = 'Band Photo Story'").get();
+  assert.ok(story.lead_photo, 'head-of-grade photo stored');
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS c FROM photos WHERE news_id = ?').get(story.id).c, 3);
+
+  const preview = await (await get('/newsletter/preview.html')).text();
+  const cardStart = preview.indexOf('Band Photo Story');
+  const card = preview.slice(cardStart, cardStart + 6000);
+  // The portrait renders before the body text, small like the principal's.
+  const headIdx = card.indexOf('alt="Section head"');
+  assert.ok(headIdx > -1, 'section head portrait renders');
+  assert.ok(headIdx < card.indexOf('Wide photos please.'), 'portrait sits above the text');
+  assert.match(card, /alt="Section head" width="96"/);
+  // Band photos use the wide sizes: hero 622, pairs 306 (not 288/139).
+  assert.match(card, /class="ph-hero" width="622"/);
+  assert.match(card, /class="ph-pair" width="306"/);
+  // A column story keeps the narrow sizes.
+  const imgN = await png(800, 600, '#224422');
+  await mp('/news', { title: 'Column Photo Story', body: 'Narrow photos.', section: 'primary' }, [
+    ['photos', imgN, 'p1.png'],
+    ['photos', imgN, 'p2.png'],
+    ['photos', imgN, 'p3.png'],
+  ]);
+  const preview2 = await (await get('/newsletter/preview.html')).text();
+  const colStart = preview2.indexOf('Column Photo Story');
+  const colCard = preview2.slice(colStart, colStart + 6000);
+  assert.match(colCard, /class="ph-hero" width="288"/);
+  assert.match(colCard, /class="ph-pair" width="139"/);
+  // 3 photos = hero + one complete pair - no dangling half-empty rows, and a
+  // 2-photo article pairs both side by side in one row.
+  assert.strictEqual((colCard.match(/class="ph-pair"/g) || []).length, 2);
+  const imgT = await png(800, 600, '#553311');
+  await mp('/news', { title: 'Two Photo Story', body: 'Two.', section: 'primary' }, [
+    ['photos', imgT, 't1.png'],
+    ['photos', imgT, 't2.png'],
+  ]);
+  const preview3 = await (await get('/newsletter/preview.html')).text();
+  const twoStart = preview3.indexOf('Two Photo Story');
+  const twoCard = preview3.slice(twoStart, twoStart + 6000);
+  assert.strictEqual((twoCard.match(/class="ph-hero"/g) || []).length, 0, 'even counts have no lone hero');
+  assert.strictEqual((twoCard.match(/class="ph-pair"/g) || []).length, 2, 'two photos share one row');
+  db.prepare("DELETE FROM news WHERE title = 'Two Photo Story'").run();
+
+  // Content photos are capped at 4: a fifth is refused outright by the form...
+  const five = await mp('/news', { title: 'Too Many', body: 'x', section: 'primary' },
+    [1, 2, 3, 4, 5].map((i) => ['photos', imgN, `f${i}.png`]));
+  assert.strictEqual(five.status, 400);
+  assert.ok(!db.prepare("SELECT 1 FROM news WHERE title = 'Too Many'").get(), 'nothing stored');
+  // ...topping up an article past 4 is refused with a clear message...
+  const colStory = db.prepare("SELECT * FROM news WHERE title = 'Column Photo Story'").get();
+  const topUp = await mp(`/news/${colStory.id}`, { title: 'Column Photo Story', body: 'Narrow photos.', section: 'primary' },
+    [['photos', imgN, 'x1.png'], ['photos', imgN, 'x2.png']]);
+  assert.strictEqual(topUp.status, 400);
+  assert.match(await topUp.text(), /at most 4 photos/);
+  // ...and the live editor refuses the fifth too.
+  db.prepare('INSERT INTO photos (news_id, filename, original_name, mime, normalized) VALUES (?, ?, ?, ?, 1)').run(
+    colStory.id, 'pad.jpg', 'pad.jpg', 'image/jpeg');
+  const form5 = new FormData();
+  form5.append('news_id', String(colStory.id));
+  form5.append('photo', new Blob([imgN], { type: 'image/png' }), 'fifth.png');
+  const live = await fetch(base + '/api/edit/photo/add', {
+    method: 'POST', headers: { cookie: cookies, 'x-csrf-token': csrf }, body: form5,
+  });
+  assert.strictEqual(live.status, 400);
+  assert.match((await live.json()).error, /at most 4 photos/);
+
+  // A legacy article already over the cap can still save text-only edits.
+  const legacy = db.prepare("SELECT * FROM news WHERE title = 'Column Photo Story'").get();
+  for (let i = 0; i < 3; i++) {
+    db.prepare('INSERT INTO photos (news_id, filename, original_name, mime, normalized) VALUES (?, ?, ?, ?, 1)').run(
+      legacy.id, `legacy${i}.jpg`, `legacy${i}.jpg`, 'image/jpeg');
+  }
+  const textOnly = await mp(`/news/${legacy.id}`, { title: 'Column Photo Story', body: 'Edited text only.', section: 'primary' }, []);
+  assert.strictEqual(textOnly.status, 302, 'over-cap legacy article still saves text edits');
+
+  // Removing the head photo through the edit form works.
+  const removed = await mp(`/news/${story.id}`,
+    { title: 'Band Photo Story', body: 'Wide photos please.', section: 'whole_school', remove_lead_photo: '1' }, []);
+  assert.strictEqual(removed.status, 302);
+  assert.strictEqual(db.prepare('SELECT lead_photo FROM news WHERE id = ?').get(story.id).lead_photo, null);
+
+  db.prepare("DELETE FROM news WHERE title IN ('Band Photo Story', 'Column Photo Story', 'Two Photo Story')").run();
+});
+
+test('uploaded photos are cropped to a uniform 4:3 so pairs line up', async () => {
+  const sharp = require('sharp');
+  const edit = await (await get('/newsletter/preview.html?edit=1')).text();
+  const newsId = edit.match(/data-edit="news:(\d+):title"/)[1];
+  const tall = await sharp({ create: { width: 300, height: 400, channels: 3, background: '#123456' } })
+    .png()
+    .toBuffer();
+  const form = new FormData();
+  form.append('news_id', newsId);
+  form.append('photo', new Blob([tall], { type: 'image/png' }), 'tall.png');
+  const res = await fetch(base + '/api/edit/photo/add', {
+    method: 'POST',
+    headers: { cookie: cookies, 'x-csrf-token': csrf },
+    body: form,
+  });
+  assert.strictEqual((await res.json()).ok, true);
+  const photo = db.prepare('SELECT * FROM photos WHERE news_id = ? ORDER BY id DESC').get(newsId);
+  assert.match(photo.filename, /\.jpg$/);
+  assert.strictEqual(photo.normalized, 1);
+  const stored = require('path').join(process.env.DATA_DIR, 'uploads', photo.filename);
+  const meta = await sharp(stored).metadata();
+  assert.strictEqual(meta.format, 'jpeg');
+  assert.strictEqual(meta.width, 300);
+  assert.strictEqual(meta.height, 225, 'camera portrait is cropped to 4:3');
+  db.prepare('DELETE FROM photos WHERE id = ?').run(photo.id);
+
+  // Extreme shapes are NOT cropped: a wide banner/logo and a tall
+  // screenshot keep their full frame (just re-encoded).
+  for (const [w, h] of [[1600, 500], [200, 800]]) {
+    const img = await sharp({ create: { width: w, height: h, channels: 3, background: '#334455' } }).png().toBuffer();
+    const f = new FormData();
+    f.append('news_id', newsId);
+    f.append('photo', new Blob([img], { type: 'image/png' }), 'shape.png');
+    await fetch(base + '/api/edit/photo/add', { method: 'POST', headers: { cookie: cookies, 'x-csrf-token': csrf }, body: f });
+    const row = db.prepare('SELECT * FROM photos WHERE news_id = ? ORDER BY id DESC').get(newsId);
+    const m = await sharp(require('path').join(process.env.DATA_DIR, 'uploads', row.filename)).metadata();
+    assert.ok(Math.abs(m.width / m.height - w / h) < 0.02, `a ${w}x${h} image keeps its shape (got ${m.width}x${m.height})`);
+    assert.ok(m.width <= 1200 && m.height <= 1200, 'capped to 1200px');
+    db.prepare('DELETE FROM photos WHERE id = ?').run(row.id);
+  }
+
+  // The crop is anchored to the TOP of a portrait photo - the "head end" -
+  // never the busy middle. Red band on top, blue below: the crop keeps red.
+  const headshot = await sharp({ create: { width: 300, height: 400, channels: 3, background: '#0000ff' } })
+    .composite([{ input: { create: { width: 300, height: 220, channels: 3, background: '#ff0000' } }, top: 0, left: 0 }])
+    .png()
+    .toBuffer();
+  const form2 = new FormData();
+  form2.append('news_id', newsId);
+  form2.append('photo', new Blob([headshot], { type: 'image/png' }), 'headshot.png');
+  await fetch(base + '/api/edit/photo/add', { method: 'POST', headers: { cookie: cookies, 'x-csrf-token': csrf }, body: form2 });
+  const photo2 = db.prepare('SELECT * FROM photos WHERE news_id = ? ORDER BY id DESC').get(newsId);
+  const stats = await sharp(require('path').join(process.env.DATA_DIR, 'uploads', photo2.filename)).stats();
+  assert.ok(stats.channels[0].mean > 200 && stats.channels[2].mean < 60, 'the top of the photo survives the crop');
+  db.prepare('DELETE FROM photos WHERE id = ?').run(photo2.id);
+});
+
+test('live editor API: drag-and-drop swaps sections within a column; the area rule guards drags', async () => {
+  await post('/news', { title: 'Drag Article A', body: 'aaa', section: 'primary', slot: 'D' });
+  await post('/news', { title: 'Drag Article B', body: 'bbb', section: 'primary', slot: 'F' });
+  const idOf = (t) => db.prepare('SELECT id FROM news WHERE title = ?').get(t).id;
+  const slotOf = (t) => db.prepare('SELECT slot FROM news WHERE title = ?').get(t).slot;
+  const move = (id, slot, beforeId) =>
+    fetch(base + '/api/edit/slot', {
+      method: 'POST',
+      headers: { cookie: cookies, 'content-type': 'application/json', 'x-csrf-token': csrf },
+      body: JSON.stringify({ news_id: id, slot, before_id: beforeId }),
+    });
+
+  // Dropping A on B inserts A ABOVE B in B's section - nothing swaps.
+  const res = await move(idOf('Drag Article A'), 'F', idOf('Drag Article B'));
+  assert.strictEqual((await res.json()).ok, true);
+  assert.strictEqual(slotOf('Drag Article A'), 'F');
+  assert.strictEqual(slotOf('Drag Article B'), 'F', 'the drop target stays where it is');
+  let preview = await (await get('/newsletter/preview.html')).text();
+  assert.ok(preview.indexOf('Drag Article A') < preview.indexOf('Drag Article B'), 'dragged story lands above the drop target');
+
+  // Moving onto an empty section places it there alone; bad slots rejected.
+  await move(idOf('Drag Article A'), 'H');
+  assert.strictEqual(slotOf('Drag Article A'), 'H');
+  assert.strictEqual(slotOf('Drag Article B'), 'F', 'unrelated article untouched');
+  const bad = await move(idOf('Drag Article A'), 'Z');
+  assert.strictEqual(bad.status, 400);
+
+  // Same-section drops reorder the stack.
+  await move(idOf('Drag Article B'), 'H'); // appends below A
+  preview = await (await get('/newsletter/preview.html')).text();
+  assert.ok(preview.indexOf('Drag Article A') < preview.indexOf('Drag Article B'));
+  await move(idOf('Drag Article B'), 'H', idOf('Drag Article A'));
+  preview = await (await get('/newsletter/preview.html')).text();
+  assert.ok(preview.indexOf('Drag Article B') < preview.indexOf('Drag Article A'), 'same-section drop moves it above');
+
+  // Cross-area drops work anywhere - the area only sets the default spot.
+  const cross = await move(idOf('Drag Article A'), 'E');
+  assert.strictEqual((await cross.json()).ok, true, 'primary story drags into the right column');
+  assert.strictEqual(slotOf('Drag Article A'), 'E');
+
+  // not available without a manager session
+  const anon = await fetch(base + '/api/edit/slot', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ news_id: 1, slot: 'D' }),
+    redirect: 'manual',
+  });
+  assert.ok([302, 403].includes(anon.status));
+  db.prepare("DELETE FROM news WHERE title IN ('Drag Article A', 'Drag Article B')").run();
+});
+
+
+test('editable preview is CSP-safe: no inline scripts, CSRF via body attribute', async () => {
+  const edit = await (await get('/newsletter/preview.html?edit=1')).text();
+  // helmet serves script-src 'self': an inline <script> would be silently
+  // blocked and every editor save would 403 (the "images not replacing" bug).
+  assert.ok(!/<script>/.test(edit), 'no inline scripts in the editable preview');
+  assert.match(edit, /<script src="\/js\/preview-editor\.js"><\/script>/);
+  assert.match(edit, /<body[^>]* data-csrf="[^"]+"/);
+  const plain = await (await get('/newsletter/preview.html')).text();
+  assert.ok(!plain.includes('data-csrf'), 'plain preview carries no token');
+});
+
+
+test('settings connection test reports the File Manager check', async () => {
+  // Mailchimp is unconfigured in tests: the test button must render the
+  // failure clearly rather than crash.
+  const res = await post('/settings/test-mailchimp', {});
+  assert.strictEqual(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /alert-error/);
+  assert.match(html, /Mailchimp is not configured/);
+});
+
+
+test('automatic reminders are off by default; manual send buttons still work', async () => {
+  const reminders = require('../src/reminders');
+  const { getSetting } = require('../src/db');
+  assert.strictEqual(getSetting('auto_reminders'), '0', 'off until individual staff emails exist');
+  // Scheduled path (what the cron job calls) is skipped with a clear reason.
+  const scheduled = await reminders.sendMondayReminder();
+  assert.strictEqual(scheduled.sent, false);
+  assert.match(scheduled.reason, /disabled in Settings/);
+  const scheduledThu = await reminders.sendThursdayReminder();
+  assert.match(scheduledThu.reason, /disabled in Settings/);
+  // The manual dashboard button bypasses the toggle (fails later only
+  // because Mailchimp is unconfigured in tests - not because of the toggle).
+  const manual = await reminders.sendMondayReminder({ manual: true });
+  assert.strictEqual(manual.sent, false);
+  assert.match(manual.reason, /Mailchimp is not configured/);
+  const row = db.prepare("SELECT * FROM reminder_log WHERE detail LIKE '%disabled in Settings%' ORDER BY id DESC").get();
+  assert.ok(row, 'skip is visible in the reminder log');
+});
+
+test('editor review notification: needs an editor email, then Mailchimp', async () => {
+  const reminders = require('../src/reminders');
+  const { setSetting } = require('../src/db');
+  const none = await reminders.sendEditorNotification({ weekStart: '2026-08-24', status: 'draft_created', warnings: [] });
+  assert.strictEqual(none.sent, false);
+  assert.match(none.reason, /No editor email configured/);
+  setSetting('editor_email', 'editor@test.local');
+  const noMc = await reminders.sendEditorNotification({
+    weekStart: '2026-08-24',
+    status: 'draft_created',
+    warnings: ['One photo failed'],
+    campaignWebUrl: 'https://us1.admin.mailchimp.com/campaigns/edit?id=1',
+  });
+  assert.strictEqual(noMc.sent, false);
+  assert.match(noMc.reason, /Mailchimp is not configured/);
+  setSetting('editor_email', '');
+});
+
+test('settings save the reminder toggle, editor email and the new generation schedule', async () => {
+  const { getSetting, SETTING_DEFAULTS } = require('../src/db');
+  // The product default (the live row is pinned to Sunday for the suite).
+  assert.strictEqual(SETTING_DEFAULTS.friday_generate_cron, '0 18 * * 4', 'generation defaults to Thursday 18:00');
+  assert.strictEqual(SETTING_DEFAULTS.reply_to, 'office@bga.ge', 'replies default to the school office');
+  const res = await post('/settings', {
+    timezone: 'Asia/Tbilisi',
+    monday_reminder_cron: '0 9 * * 1',
+    thursday_reminder_cron: '0 9 * * 4',
+    friday_generate_cron: '59 23 * * 7',
+    auto_reminders: '1',
+    editor_email: 'editor@test.local, second@test.local',
+    newsletter_name: 'BGA Newsletter',
+    school_name: 'BGA',
+    from_name: 'BGA',
+    reply_to: 'office@bga.ge',
+    calendar_url: '',
+    footer_note: '',
+  });
+  assert.strictEqual(res.status, 302);
+  assert.strictEqual(getSetting('auto_reminders'), '1');
+  assert.strictEqual(getSetting('editor_email'), 'editor@test.local, second@test.local');
+  // invalid editor email rejected
+  const bad = await post('/settings', { editor_email: 'not-an-email' });
+  assert.strictEqual(bad.status, 400);
+  // restore
+  await post('/settings', { auto_reminders: '0', editor_email: '' });
+  assert.strictEqual(getSetting('auto_reminders'), '0');
+  // Saving settings restarts the cron scheduler; stop it so the test
+  // process can exit (live cron tasks keep the event loop alive).
+  require('../src/scheduler').stop();
+});
+
+
+// ---- SLT review workflow, five content areas, approval to send ----
+
+// Signs in as another account in its own cookie jar, so several roles can act
+// in the same test.
+async function loginAs(email, password) {
+  const jar = new Map();
+  const absorb = (res) => (res.headers.getSetCookie() || []).forEach((c) => jar.set(c.split('=')[0], c.split(';')[0]));
+  const cookie = () => [...jar.values()].join('; ');
+  const page = await fetch(base + '/login');
+  absorb(page);
+  const token = await extractCsrf(await page.text());
+  const login = await fetch(base + '/login', {
+    method: 'POST',
+    headers: { cookie: cookie(), 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: token, email, password }).toString(),
+    redirect: 'manual',
+  });
+  absorb(login);
+  assert.strictEqual(login.status, 302, `${email} could not log in`);
+  const session = {
+    csrf: token,
+    get: async (url) => {
+      const res = await fetch(base + url, { headers: { cookie: cookie() }, redirect: 'manual' });
+      absorb(res);
+      return res;
+    },
+    post: async (url, params) => {
+      const res = await fetch(base + url, {
+        method: 'POST',
+        headers: { cookie: cookie(), 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ _csrf: session.csrf, ...params }).toString(),
+        redirect: 'manual',
+      });
+      absorb(res);
+      return res;
+    },
+  };
+  return session;
+}
+
+async function makeUser(name, email, role, section) {
+  await post('/users', { name, email, role, section: section || '', password: 'workflow-pass-1' });
+  return loginAs(email, 'workflow-pass-1');
+}
+
+test('staff can write for any of the five areas; stories start unchecked', async () => {
+  const teacher = await makeUser('Caradoc Teacher', 'caradoc@test.local', 'staff');
+  const form = await (await teacher.get('/news/new')).text();
+  for (const area of ['Whole School', 'Primary', 'Secondary', 'Sixth Form', 'Co-Curricular']) {
+    assert.ok(form.includes(area), `area ${area} offered to staff`);
+  }
+  // A teacher may write about Sixth Form even though they are not in it.
+  const res = await teacher.post('/news', { title: 'Sixth Form Trip', body: 'A great day out.', section: 'sixth_form' });
+  assert.strictEqual(res.status, 302);
+  const row = db.prepare("SELECT * FROM news WHERE title = 'Sixth Form Trip'").get();
+  assert.strictEqual(row.section, 'sixth_form');
+  assert.strictEqual(row.review_status, 'pending', 'staff submissions wait for the SLT check');
+
+  // Unchecked stories stay out of the newsletter.
+  const preview = await (await get('/newsletter/preview.html')).text();
+  assert.ok(!preview.includes('Sixth Form Trip'), 'an unchecked story is not in the issue');
+});
+
+test('SLT check only their own area, and approving puts the story in the issue', async () => {
+  const primaryHead = await makeUser('Primary Head', 'slt.primary@test.local', 'slt', 'primary');
+  const sixthHead = await makeUser('Sixth Form Head', 'slt.sixth@test.local', 'slt', 'sixth_form');
+  const id = db.prepare("SELECT id FROM news WHERE title = 'Sixth Form Trip'").get().id;
+
+  // The primary lead has no say over a sixth-form story.
+  const refused = await primaryHead.post(`/news/${id}/review`, { decision: 'approved' });
+  assert.strictEqual(refused.status, 403);
+  assert.strictEqual(db.prepare('SELECT review_status FROM news WHERE id = ?').get(id).review_status, 'pending');
+
+  const ok = await sixthHead.post(`/news/${id}/review`, { decision: 'approved' });
+  assert.strictEqual(ok.status, 302);
+  const row = db.prepare('SELECT * FROM news WHERE id = ?').get(id);
+  assert.strictEqual(row.review_status, 'approved');
+  assert.ok(row.reviewed_by, 'the checker is recorded');
+
+  const preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /Sixth Form Trip/, 'a checked story is in the issue');
+
+  // Sending it back with a note removes it again.
+  await sixthHead.post(`/news/${id}/review`, { decision: 'rejected', review_note: 'Please add a photo.' });
+  const after = db.prepare('SELECT * FROM news WHERE id = ?').get(id);
+  assert.strictEqual(after.review_status, 'rejected');
+  assert.strictEqual(after.review_note, 'Please add a photo.');
+  const preview2 = await (await get('/newsletter/preview.html')).text();
+  assert.ok(!preview2.includes('Sixth Form Trip'));
+});
+
+test('whole-school stories can be checked by any SLT member; rewriting one sends it back', async () => {
+  const teacher = await loginAs('caradoc@test.local', 'workflow-pass-1');
+  const primaryHead = await loginAs('slt.primary@test.local', 'workflow-pass-1');
+  await teacher.post('/news', { title: 'Whole School Assembly', body: 'Everyone attended.', section: 'whole_school' });
+  const id = db.prepare("SELECT id FROM news WHERE title = 'Whole School Assembly'").get().id;
+
+  const ok = await primaryHead.post(`/news/${id}/review`, { decision: 'approved' });
+  assert.strictEqual(ok.status, 302, 'whole-school stories are open to any SLT member');
+  assert.strictEqual(db.prepare('SELECT review_status FROM news WHERE id = ?').get(id).review_status, 'approved');
+
+  // The author rewriting it means it needs checking again.
+  await teacher.post(`/news/${id}`, {
+    title: 'Whole School Assembly (updated)',
+    body: 'Everyone attended and sang.',
+    section: 'whole_school',
+  });
+  assert.strictEqual(db.prepare('SELECT review_status FROM news WHERE id = ?').get(id).review_status, 'pending');
+});
+
+test('marketing lays the issue out but cannot approve it; the principal can', async () => {
+  const marketing = await makeUser('Marketing Lead', 'marketing@test.local', 'marketing');
+  const principal = await makeUser('Head Teacher', 'principal@test.local', 'principal');
+  const id = db.prepare("SELECT id FROM news WHERE title LIKE 'Whole School Assembly%'").get().id;
+
+  // Layout actions are open to marketing.
+  assert.strictEqual((await marketing.post(`/news/${id}/include`, { included: '0' })).status, 302);
+  assert.strictEqual((await marketing.post(`/news/${id}/include`, { included: '1' })).status, 302);
+  assert.strictEqual((await marketing.post(`/news/${id}/slot`, { slot: 'W' })).status, 302);
+  assert.match((await (await marketing.get('/newsletter/preview.html?edit=1')).text()), /preview-editor\.js/);
+
+  const report = await marketing.post('/newsletter/generate', {});
+  assert.strictEqual(report.status, 200);
+  const issue = db.prepare('SELECT * FROM issues ORDER BY id DESC').get();
+  assert.ok(!issue.approved_at, 'a fresh issue is not approved');
+
+  // Marketing must not sign the issue off...
+  const refused = await marketing.post(`/newsletter/issues/${issue.id}/approve`, {});
+  assert.strictEqual(refused.status, 403);
+  // ...the principal does.
+  const approved = await principal.post(`/newsletter/issues/${issue.id}/approve`, {});
+  assert.strictEqual(approved.status, 302);
+  const signed = db.prepare('SELECT * FROM issues WHERE id = ?').get(issue.id);
+  assert.ok(signed.approved_at && signed.approved_by, 'approval is recorded with who and when');
+
+  // Rebuilding the issue means it must be proof-read again.
+  await marketing.post('/newsletter/generate', {});
+  const rebuilt = db.prepare('SELECT * FROM issues WHERE id = ?').get(issue.id);
+  assert.ok(!rebuilt.approved_at, 'regenerating clears the approval');
+  require('../src/scheduler').stop();
+});
+
+test('staff cannot review, lay out or approve', async () => {
+  const teacher = await loginAs('caradoc@test.local', 'workflow-pass-1');
+  const id = db.prepare('SELECT id FROM news ORDER BY id DESC').get().id;
+  const issue = db.prepare('SELECT id FROM issues ORDER BY id DESC').get();
+  assert.strictEqual((await teacher.post(`/news/${id}/review`, { decision: 'approved' })).status, 403);
+  assert.strictEqual((await teacher.post(`/news/${id}/include`, { included: '0' })).status, 403);
+  assert.strictEqual((await teacher.post('/newsletter/generate', {})).status, 403);
+  assert.strictEqual((await teacher.post(`/newsletter/issues/${issue.id}/approve`, {})).status, 403);
+  assert.strictEqual((await teacher.get('/users')).status, 403);
+  // ...but the live editor stays read-only rather than erroring.
+  const preview = await (await teacher.get('/newsletter/preview.html?edit=1')).text();
+  assert.ok(!preview.includes('preview-editor.js'), 'no live editor for staff');
+});
+
+test('the generation report names stories still waiting for their SLT check', async () => {
+  const teacher = await loginAs('caradoc@test.local', 'workflow-pass-1');
+  await teacher.post('/news', { title: 'Unchecked Story', body: 'Waiting for a decision.', section: 'primary' });
+  // Pin the week the story just landed in: run on a Thursday evening the
+  // submission week has already rolled past the generation week.
+  const result = await generateIssue({ weekStart: require('../src/appweek').submissionWeekStart(), trigger: 'test' });
+  const step = result.steps.find((s) => s.label.includes('SLT check'));
+  assert.ok(step && !step.ok, 'the report flags the outstanding check');
+  assert.match(step.detail, /Unchecked Story/);
+  assert.ok(result.warnings.some((w) => /waiting for their SLT check/.test(w)));
+  assert.ok(!result.html.includes('Unchecked Story'), 'it is left out of the draft');
+});
+
+
+// ---- staff import + invitation links ----
+
+test('site admin imports staff from CSV; accounts start locked, SLT cannot import', async () => {
+  const csv = [
+    'Member Name,Member Email', // header is skipped
+    'Caradoc Peters,c.peters@import.local',
+    'Samuel Murray,s.murray@import.local,slt,secondary',
+    'Orla OShea,o.oshea@import.local,slt,primary',
+    'Head Teacher,principal@test.local', // exists already - untouched
+    'broken line without email',
+    'Caradoc Peters,c.peters@import.local', // duplicate inside the file
+  ].join('\n');
+  const res = await post('/users/import', { csv });
+  assert.strictEqual(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /3 account\(s\) created/);
+  assert.match(html, /1 already existed/);
+  assert.match(html, /1 line\(s\) skipped as invalid/);
+
+  const caradoc = db.prepare("SELECT * FROM users WHERE email = 'c.peters@import.local'").get();
+  assert.strictEqual(caradoc.role, 'staff');
+  assert.strictEqual(caradoc.password_hash, '', 'imported accounts have no password');
+  const murray = db.prepare("SELECT * FROM users WHERE email = 's.murray@import.local'").get();
+  assert.strictEqual(murray.role, 'slt');
+  assert.strictEqual(murray.section, 'secondary');
+  const existing = db.prepare("SELECT password_hash FROM users WHERE email = 'principal@test.local'").get();
+  assert.ok(existing.password_hash.length > 10, 'existing accounts are never touched');
+
+  // A locked account cannot log in, and the login page says why.
+  const attempt = await fetch(base + '/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: cookies },
+    body: new URLSearchParams({ _csrf: csrf, email: 'c.peters@import.local', password: 'whatever123' }).toString(),
+    redirect: 'manual',
+  });
+  assert.strictEqual(attempt.status, 401);
+  assert.match(await attempt.text(), /not been activated yet/);
+
+  // Import and invite-sending are for the site admin only - not SLT.
+  const slt = await loginAs('slt.primary@test.local', 'workflow-pass-1');
+  assert.strictEqual((await slt.post('/users/import', { csv: 'X,x@import.local' })).status, 403);
+  assert.strictEqual((await slt.post('/users/send-invites', {})).status, 403);
+});
+
+test('invite link: sets the password once, signs in, and cannot be reused', async () => {
+  const invites = require('../src/invites');
+  const bcrypt = require('bcryptjs');
+  const pending = invites.pendingInvitees();
+  assert.ok(pending.length >= 3, 'imported accounts are pending invites');
+  const issued = invites.issueTokens(pending);
+  const mine = issued.find(({ user }) => user.email === 'c.peters@import.local');
+  assert.ok(mine.link.includes(`/invite/${mine.token}`));
+  const stored = db.prepare("SELECT invite_token_hash FROM users WHERE email = 'c.peters@import.local'").get();
+  assert.ok(stored.invite_token_hash && stored.invite_token_hash !== mine.token, 'only a hash of the token is stored');
+
+  // The personal page renders...
+  const page = await fetch(base + `/invite/${mine.token}`);
+  assert.strictEqual(page.status, 200);
+  const pageHtml = await page.text();
+  assert.match(pageHtml, /Caradoc Peters/);
+  const jar = (page.headers.getSetCookie() || []).map((c) => c.split(';')[0]).join('; ');
+  const token = pageHtml.match(/name="_csrf" value="([^"]+)"/)[1];
+
+  // ...rejects a weak or mismatched password...
+  const weak = await fetch(base + `/invite/${mine.token}`, {
+    method: 'POST',
+    headers: { cookie: jar, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: token, password: 'short', password_confirm: 'short' }).toString(),
+    redirect: 'manual',
+  });
+  assert.strictEqual(weak.status, 400);
+
+  // ...and on success sets the password, signs the user in and burns the link.
+  const ok = await fetch(base + `/invite/${mine.token}`, {
+    method: 'POST',
+    headers: { cookie: jar, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: token, password: 'caradoc-pass-1', password_confirm: 'caradoc-pass-1' }).toString(),
+    redirect: 'manual',
+  });
+  assert.strictEqual(ok.status, 302);
+  assert.strictEqual(ok.headers.get('location'), '/');
+  const activated = db.prepare("SELECT * FROM users WHERE email = 'c.peters@import.local'").get();
+  assert.ok(bcrypt.compareSync('caradoc-pass-1', activated.password_hash));
+  assert.strictEqual(activated.invite_token_hash, null, 'token burned after use');
+  const reuse = await fetch(base + `/invite/${mine.token}`);
+  assert.strictEqual(reuse.status, 404);
+  const bogus = await fetch(base + '/invite/definitely-not-a-real-token-here');
+  assert.strictEqual(bogus.status, 404);
+
+  // The new password logs in normally now.
+  const caradoc = await loginAs('c.peters@import.local', 'caradoc-pass-1');
+  assert.strictEqual((await caradoc.get('/')).status, 200);
+});
+
+test('send-invites targets only never-emailed accounts by default; scope=all is the reminder round', async () => {
+  // Everyone still pending was already stamped by issueTokens above, so the
+  // default (scope=new) has nobody left to email - adding a new person later
+  // must not re-email these stragglers.
+  const res = await post('/users/send-invites', {});
+  assert.strictEqual(res.status, 200);
+  assert.match(await res.text(), /No invitations were sent:.*Nobody to invite/);
+
+  // The explicit reminder round reaches for everyone pending - and with
+  // Mailchimp unconfigured it reports exactly that.
+  const all = await post('/users/send-invites', { scope: 'all' });
+  assert.strictEqual(all.status, 200);
+  assert.match(await all.text(), /No invitations were sent:.*Mailchimp is not configured/);
+
+  const { inviteEmailHtml } = require('../src/invites');
+  const html = inviteEmailHtml();
+  assert.match(html, /\/invite\/\*\|INVITE\|\*/, 'the button carries the personal merge-tag link');
+  assert.match(html, /Create your password/);
+});
+
+test('a newly added person is the only "new" invitee; single-person invites work per row', async () => {
+  const invites = require('../src/invites');
+  await post('/users/import', { csv: 'Newest Arrival,new.arrival@import.local' });
+
+  // neverInvited() sees only the new person; pendingInvitees() sees everyone.
+  const fresh = invites.neverInvited();
+  assert.strictEqual(fresh.length, 1);
+  assert.strictEqual(fresh[0].email, 'new.arrival@import.local');
+  assert.ok(invites.pendingInvitees().length > 1, 'earlier stragglers are still pending overall');
+
+  // The users page offers the split buttons and a per-row send button.
+  const page = await (await get('/users')).text();
+  assert.match(page, /Send invites to 1 new/);
+  assert.match(page, /Re-send reminders to all \d+ not activated/);
+  assert.match(page, /Send invite</, 'never-emailed row gets a first-time button');
+  assert.match(page, /Re-send invite</, 'already-emailed row gets a re-send button');
+
+  // Issuing a token for one person leaves everyone else's link untouched.
+  const before = db.prepare("SELECT invite_token_hash FROM users WHERE email = 's.murray@import.local'").get();
+  invites.issueTokens(fresh);
+  const after = db.prepare("SELECT invite_token_hash FROM users WHERE email = 's.murray@import.local'").get();
+  assert.strictEqual(after.invite_token_hash, before.invite_token_hash, 'other tokens are not reissued');
+
+  // Per-row route: site admin only, refuses activated accounts, and reports
+  // the Mailchimp reason for a valid pending target.
+  const newRow = db.prepare("SELECT id FROM users WHERE email = 'new.arrival@import.local'").get();
+  const activatedRow = db.prepare("SELECT id FROM users WHERE email = 'c.peters@import.local'").get();
+  const slt = await loginAs('slt.primary@test.local', 'workflow-pass-1');
+  assert.strictEqual((await slt.post(`/users/${newRow.id}/invite`, {})).status, 403);
+  assert.strictEqual((await post(`/users/${activatedRow.id}/invite`, {})).status, 400, 'no invites to activated accounts');
+  assert.strictEqual((await post('/users/999999/invite', {})).status, 404);
+  const single = await post(`/users/${newRow.id}/invite`, {});
+  assert.strictEqual(single.status, 200);
+  assert.match(await single.text(), /No invitations were sent:.*Mailchimp is not configured/);
+});
+
+test('bulk role fix updates existing accounts; bulk delete prunes old staff safely', async () => {
+  await post('/users/import', { csv: 'Old Timer,old.timer@import.local\nMis Roled,tom.slt@import.local' });
+  const misroled = db.prepare("SELECT * FROM users WHERE email = 'tom.slt@import.local'").get();
+  assert.strictEqual(misroled.role, 'staff', 'imported without a role = staff');
+
+  // Paste both formats: bare "email, role, area" and full import lines.
+  const res = await post('/users/set-roles', {
+    lines: [
+      'Name,Email,Role,Area', // header is skipped
+      'tom.slt@import.local, slt, secondary',
+      'Mis Roled,tom.slt@import.local,slt,secondary', // full line form also accepted
+      'ghost@import.local, slt',
+      'broken line without email',
+    ].join('\n'),
+  });
+  assert.strictEqual(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /Roles updated:/);
+  assert.match(html, /Not found[^<]*ghost@import\.local/);
+  assert.match(html, /Skipped lines:.*broken line/);
+  const fixed = db.prepare("SELECT * FROM users WHERE email = 'tom.slt@import.local'").get();
+  assert.strictEqual(fixed.role, 'slt');
+  assert.strictEqual(fixed.section, 'secondary');
+
+  // Bulk delete: ticked accounts go; admin/principal and self never do.
+  const oldId = db.prepare("SELECT id FROM users WHERE email = 'old.timer@import.local'").get().id;
+  const principalId = db.prepare("SELECT id FROM users WHERE email = 'principal@test.local'").get().id;
+  const meId = db.prepare("SELECT id FROM users WHERE email = 'admin@test.local'").get().id;
+  const del = await post('/users/bulk-delete', { ids: `${oldId},${principalId},${meId}` });
+  assert.strictEqual(del.status, 200);
+  const delHtml = await del.text();
+  assert.match(delHtml, /1 account\(s\) deleted/);
+  assert.match(delHtml, /Skipped[^<]*Head Teacher/);
+  assert.ok(!db.prepare("SELECT 1 FROM users WHERE email = 'old.timer@import.local'").get(), 'old staff removed');
+  assert.ok(db.prepare("SELECT 1 FROM users WHERE email = 'principal@test.local'").get(), 'principal survives bulk delete');
+  assert.ok(db.prepare("SELECT 1 FROM users WHERE email = 'admin@test.local'").get(), 'own account survives');
+
+  // Both tools are for the site admin only.
+  const slt = await loginAs('slt.primary@test.local', 'workflow-pass-1');
+  assert.strictEqual((await slt.post('/users/set-roles', { lines: 'x@x.x, admin' })).status, 403);
+  assert.strictEqual((await slt.post('/users/bulk-delete', { ids: '1' })).status, 403);
+  db.prepare("DELETE FROM users WHERE email = 'tom.slt@import.local'").run();
+});
+
+test('news list labels weeks and hides past stories behind a toggle', async () => {
+  // A story from a long-gone week (e.g. last school year).
+  db.prepare(
+    "INSERT INTO news (title, body, section, slot, included, review_status, created_by, week_start) VALUES ('Ancient Story', 'old', 'primary', 'D', 1, 'approved', 1, '2025-09-01')"
+  ).run();
+  const page = await (await get('/news')).text();
+  assert.ok(!page.includes('Ancient Story'), 'past weeks are hidden by default');
+  assert.match(page, /older stor(y is|ies are) hidden/);
+  assert.match(page, /this week&#39;s issue|this week's issue/);
+
+  const allPage = await (await get('/news?all=1')).text();
+  assert.ok(allPage.includes('Ancient Story'), 'the toggle reveals past stories');
+  assert.match(allPage, /past · week of 2025-09-01/);
+  assert.match(allPage, /Hide older stories/);
+  db.prepare("DELETE FROM news WHERE title = 'Ancient Story'").run();
+});
+
+test('email export lists every account as plain text, site admin only', async () => {
+  const res = await get('/users/export.txt');
+  assert.strictEqual(res.status, 200);
+  assert.match(res.headers.get('content-type'), /text\/plain/);
+  const body = await res.text();
+  assert.ok(body.includes('admin@test.local'));
+  assert.ok(!body.includes('<'), 'plain emails only, no markup');
+  const slt = await loginAs('slt.primary@test.local', 'workflow-pass-1');
+  assert.strictEqual((await slt.get('/users/export.txt')).status, 403);
+});
+
+test('school menus: managers curate titled links; the newsletter shows them as buttons', async () => {
+  // validation: a bare word is not a link
+  const bad = await post('/menus', { title: 'Foundation', url: 'not-a-url' });
+  assert.strictEqual(bad.status, 400);
+
+  await post('/menus', { title: 'Foundation', url: 'https://bga.ge/menus/foundation.pdf' });
+  await post('/menus', { title: 'Year 6-13', url: 'https://bga.ge/menus/year-6-13.pdf' });
+  const page = await (await get('/menus')).text();
+  assert.match(page, /Foundation/);
+  assert.match(page, /year-6-13\.pdf/);
+
+  // the section renders between the principal's message and Whole School,
+  // with each title as a clickable button
+  const preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /SCHOOL MENUS/);
+  assert.match(preview, /href="https:\/\/bga\.ge\/menus\/foundation\.pdf"/);
+  assert.match(preview, /Year 6-13 &rarr;/);
+  assert.ok(preview.indexOf('SCHOOL MENUS') > preview.indexOf('Upcoming Events'), 'menus sit below the top block');
+
+  // editing a link in place
+  const id = db.prepare("SELECT id FROM menus WHERE title = 'Foundation'").get().id;
+  await post(`/menus/${id}`, { title: 'Foundation (EYFS)', url: 'https://bga.ge/menus/foundation-v2.pdf' });
+  assert.match(await (await get('/newsletter/preview.html')).text(), /Foundation \(EYFS\)/);
+
+  // staff cannot manage menus
+  const teacher = await loginAs('caradoc@test.local', 'workflow-pass-1');
+  assert.strictEqual((await teacher.get('/menus')).status, 403);
+  assert.strictEqual((await teacher.post('/menus', { title: 'X', url: 'https://x.example' })).status, 403);
+
+  // no links: the sent draft has no menus section, the preview shows the hint
+  db.prepare('DELETE FROM menus').run();
+  const result = await generateIssue({ trigger: 'test-menus' });
+  assert.ok(!result.html.includes('SCHOOL MENUS'), 'empty menus stay out of the draft');
+  assert.match(await (await get('/newsletter/preview.html')).text(), /School menus/);
+});
+
+test('the users page shows who activated their account and when they last signed in', async () => {
+  // c.peters activated via the invite link earlier - both stamps recorded.
+  const caradoc = db.prepare("SELECT * FROM users WHERE email = 'c.peters@import.local'").get();
+  assert.ok(caradoc.activated_at, 'activation is timestamped');
+  assert.ok(caradoc.last_login_at, 'activation counts as a sign-in');
+
+  // An ordinary login refreshes last_login_at.
+  db.prepare("UPDATE users SET last_login_at = NULL WHERE email = 'c.peters@import.local'").run();
+  await loginAs('c.peters@import.local', 'caradoc-pass-1');
+  assert.ok(
+    db.prepare("SELECT last_login_at FROM users WHERE email = 'c.peters@import.local'").get().last_login_at,
+    'logging in stamps last_login_at'
+  );
+
+  // The users page labels activated accounts and still-waiting invitees.
+  const page = await (await get('/users')).text();
+  assert.match(page, /✓ active/);
+  assert.match(page, /password set /);
+  assert.match(page, /last login /);
+  assert.match(page, /waiting|no invite emailed yet/);
+});
+
+test('emailed links use the learned public address, never localhost', async () => {
+  const config = require('../src/config');
+  const { publicBaseUrl, rememberBaseUrl } = require('../src/baseurl');
+  const invites = require('../src/invites');
+  const { setSetting } = require('../src/db');
+
+  // Learned from an admin browsing the real domain (behind the proxy).
+  rememberBaseUrl({ protocol: 'https', get: (h) => (h === 'host' ? 'newsletter.example.org' : null) });
+  assert.strictEqual(publicBaseUrl(), 'https://newsletter.example.org');
+  assert.match(invites.inviteEmailHtml(), /https:\/\/newsletter\.example\.org\/invite\/\*\|INVITE\|\*/);
+
+  // A localhost host header must never overwrite it.
+  rememberBaseUrl({ protocol: 'http', get: (h) => (h === 'host' ? 'localhost:9999' : null) });
+  assert.strictEqual(publicBaseUrl(), 'https://newsletter.example.org');
+
+  // With Mailchimp configured but no public address at all, sending refuses
+  // outright instead of mailing dead localhost links.
+  db.prepare("DELETE FROM settings WHERE key = 'public_base_url'").run();
+  const saved = { ...config.mailchimp };
+  Object.assign(config.mailchimp, { apiKey: 'x-us1', serverPrefix: 'us1', teachersAudienceId: 'list1' });
+  try {
+    const refused = await invites.sendStaffInvites(invites.pendingInvitees());
+    assert.strictEqual(refused.sent, false);
+    assert.match(refused.reason, /public address is still http:\/\/localhost/);
+  } finally {
+    Object.assign(config.mailchimp, saved);
+    setSetting('public_base_url', '');
+  }
+});
+
+test('saved staff headshots: upload once on the Users page, reuse from the news form', async () => {
+  const sharp = require('sharp');
+  const config = require('../src/config');
+  const png = (w, h, bg) => sharp({ create: { width: w, height: h, channels: 3, background: bg } }).png().toBuffer();
+  const onDisk = (name) => fs.existsSync(path.join(config.uploadDir, name));
+  const mp = async (url, fields, files) => {
+    const form = new FormData();
+    form.append('_csrf', csrf);
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
+    for (const [name, buf, fname] of files) form.append(name, new Blob([buf], { type: 'image/png' }), fname);
+    return fetch(base + url, { method: 'POST', headers: { cookie: cookies }, body: form, redirect: 'manual' });
+  };
+
+  db.prepare("INSERT INTO users (email, name, password_hash, role) VALUES ('head.of.year@test.local', 'Head Of Year', '', 'staff')").run();
+  const person = db.prepare("SELECT * FROM users WHERE email = 'head.of.year@test.local'").get();
+
+  // Upload the portrait once on the Users page...
+  const up = await mp(`/users/${person.id}/headshot`, {}, [['headshot', await png(300, 400, '#446688'), 'hd.png']]);
+  assert.strictEqual(up.status, 302);
+  const saved = db.prepare('SELECT headshot FROM users WHERE id = ?').get(person.id).headshot;
+  assert.ok(saved && onDisk(saved), 'headshot stored and on disk');
+  assert.match(await (await get('/users')).text(), new RegExp(`/uploads/${saved}`));
+
+  // ...the news form now offers the saved-headshot picker...
+  const form = await (await get('/news/new')).text();
+  assert.match(form, /name="lead_user_id"/);
+  assert.ok(form.includes(`<option value="${person.id}">Head Of Year</option>`), 'the person is pickable');
+
+  // ...an article created with the picker gets its OWN copy of the file...
+  const created = await mp('/news', { title: 'Headshot Reuse Story', body: 'Reusing.', section: 'primary', lead_user_id: String(person.id) }, []);
+  assert.strictEqual(created.status, 302);
+  const story = db.prepare("SELECT * FROM news WHERE title = 'Headshot Reuse Story'").get();
+  assert.ok(story.lead_photo, 'lead photo set from the saved headshot');
+  assert.notStrictEqual(story.lead_photo, saved, 'the article owns a copy, not the shared file');
+  assert.ok(onDisk(story.lead_photo));
+
+  // ...and deleting the article removes the copy, never the shared headshot.
+  assert.strictEqual((await post(`/news/${story.id}/delete`, {})).status, 302);
+  assert.ok(onDisk(saved), 'shared headshot survives article deletion');
+  assert.ok(!onDisk(story.lead_photo), "the article's own copy is cleaned up");
+
+  // An uploaded file wins over the dropdown; editing with the dropdown later
+  // swaps in a fresh copy and removes the superseded lead photo.
+  const both = await mp('/news', { title: 'Uploaded Wins', body: 'x', section: 'primary', lead_user_id: String(person.id) },
+    [['lead_photo', await png(300, 400, '#884422'), 'up.png']]);
+  assert.strictEqual(both.status, 302);
+  const uploaded = db.prepare("SELECT * FROM news WHERE title = 'Uploaded Wins'").get();
+  const uploadedBytes = fs.readFileSync(path.join(config.uploadDir, uploaded.lead_photo));
+  assert.ok(!uploadedBytes.equals(fs.readFileSync(path.join(config.uploadDir, saved))), 'the uploaded file was used, not the headshot');
+  const edited = await mp(`/news/${uploaded.id}`, { title: 'Uploaded Wins', body: 'x', section: 'primary', lead_user_id: String(person.id) }, []);
+  assert.strictEqual(edited.status, 302);
+  const after = db.prepare('SELECT * FROM news WHERE id = ?').get(uploaded.id);
+  assert.notStrictEqual(after.lead_photo, uploaded.lead_photo, 'edit swapped in a headshot copy');
+  assert.ok(!onDisk(uploaded.lead_photo), 'the replaced lead photo file is removed');
+
+  // Removing the headshot on the Users page deletes the shared file but
+  // leaves every article's own copy untouched.
+  const rm = await mp(`/users/${person.id}/headshot`, { remove_headshot: '1' }, []);
+  assert.strictEqual(rm.status, 302);
+  assert.strictEqual(db.prepare('SELECT headshot FROM users WHERE id = ?').get(person.id).headshot, null);
+  assert.ok(!onDisk(saved), 'shared headshot file deleted');
+  assert.ok(onDisk(after.lead_photo), "the article's copy still renders");
+
+  db.prepare("DELETE FROM news WHERE title = 'Uploaded Wins'").run();
+  db.prepare('DELETE FROM users WHERE id = ?').run(person.id);
+});
+
+test('export.html is the paste-into-Mailchimp version: no placeholders or editor markup', async () => {
+  const res = await get('/newsletter/export.html');
+  assert.strictEqual(res.status, 200);
+  const html = await res.text();
+  assert.ok(!html.includes('data-edit'), 'no live-editor markup');
+  assert.ok(!/SECTION [A-Z]/.test(html), 'no empty-slot placeholders');
+  // Preview keeps them (same week, placeholders on).
+  const preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /SECTION [A-Z]/);
+  // The preview page offers the copy button; the endpoint needs a login.
+  assert.match(await (await get('/newsletter/preview')).text(), /data-copy-html="\/newsletter\/export\.html/);
+  const anon = await fetch(base + '/newsletter/export.html', { redirect: 'manual' });
+  assert.strictEqual(anon.status, 302);
+});
+
+test('house points strip (fixed under the principal) and the primary awards table', async () => {
+  const sharp = require('sharp');
+  const config = require('../src/config');
+  const png = (w, h, bg) => sharp({ create: { width: w, height: h, channels: 3, background: bg } }).png().toBuffer();
+  const mp = async (url, fields, files) => {
+    const form = new FormData();
+    form.append('_csrf', csrf);
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
+    for (const [name, buf, fname] of files) form.append(name, new Blob([buf], { type: 'image/png' }), fname);
+    return fetch(base + url, { method: 'POST', headers: { cookie: cookies }, body: form, redirect: 'manual' });
+  };
+
+  // Houses: create two, give one a logo.
+  await post('/houses', { name: 'Phoenix', points: '120' });
+  await post('/houses', { name: 'Dragon', points: '250' });
+  const phoenix = db.prepare("SELECT * FROM houses WHERE name = 'Phoenix'").get();
+  const up = await mp(`/houses/${phoenix.id}/logo`, {}, [['logo', await png(200, 200, '#aa2222'), 'crest.png']]);
+  assert.strictEqual(up.status, 302);
+  const logo = db.prepare('SELECT logo FROM houses WHERE id = ?').get(phoenix.id).logo;
+  assert.ok(logo && fs.existsSync(path.join(config.uploadDir, logo)), 'house logo stored');
+
+  // A house named in the school's house palette gets its own colour; any
+  // other house starts in the brand colour and is recoloured per row.
+  await post('/houses', { name: 'Tigers', points: '205' });
+  const tigers = db.prepare("SELECT color FROM houses WHERE name = 'Tigers'").get().color;
+  assert.strictEqual(tigers, palette.houseColors.tigers || palette.brand);
+  assert.strictEqual(db.prepare('SELECT color FROM houses WHERE id = ?').get(phoenix.id).color, palette.brand);
+
+  let preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /House Points/);
+  assert.ok(preview.includes(`/uploads/${logo}`), 'logo renders');
+  assert.ok(preview.includes(`background:${tigers}`), 'tile painted in the house colour');
+  assert.match(preview, /205 Points/);
+  // The strip is fixed below the events/principal top block...
+  assert.ok(preview.indexOf('House Points') > preview.indexOf('Upcoming Events'), 'sits under the top block');
+  // ...and the leader (most points) comes first with the gold treatment.
+  assert.ok(preview.indexOf('Dragon') < preview.indexOf('Phoenix'), 'leader first');
+  assert.match(preview, /LEADING/);
+  // Updating points reorders next issue's strip - logos and names stay.
+  await post(`/houses/${phoenix.id}`, { name: 'Phoenix', points: '400' });
+  preview = await (await get('/newsletter/preview.html')).text();
+  assert.ok(preview.indexOf('Phoenix') < preview.indexOf('Dragon'), 'updated points lead');
+
+  // The strip can be hidden from the newsletter without losing any data.
+  assert.strictEqual((await post('/houses/visibility', { visible: '0' })).status, 302);
+  const hiddenExport = await (await get('/newsletter/export.html')).text();
+  assert.ok(!hiddenExport.includes('House Points'), 'hidden strip stays out of the email');
+  assert.match(await (await get('/newsletter/preview.html')).text(), /House Points - hidden/);
+  assert.ok(db.prepare('SELECT COUNT(*) AS c FROM houses').get().c >= 2, 'houses kept while hidden');
+  await post('/houses/visibility', { visible: '1' });
+  assert.match(await (await get('/newsletter/export.html')).text(), /House Points/);
+
+  // Rewards: the topic title plus a class row from an ordinary staff member.
+  await post('/awards/topic', { title: 'Generosity of Spirit Certificate Winners 12.12.25' });
+  const teacher = await makeUser('Award Teacher', 'award.teacher@test.local', 'staff');
+  const add = await teacher.post('/awards', { class_name: 'Year 3W', students: 'Marta, Renee' });
+  assert.strictEqual(add.status, 302);
+  const row = db.prepare("SELECT * FROM awards WHERE grade_stage = 'Year 3W'").get();
+  preview = await (await get('/newsletter/preview.html')).text();
+  assert.match(preview, /Primary Certificates of Recognition/);
+  assert.match(preview, /Generosity of Spirit Certificate Winners 12\.12\.25/);
+  assert.match(preview, /Year 3W/);
+  assert.match(preview, /Marta, Renee/);
+  assert.match(preview, /Congratulations to all our winners!/);
+  // ...another staff member cannot touch it, its author and managers can.
+  const rival = await makeUser('Other Teacher', 'other.teacher@test.local', 'staff');
+  assert.strictEqual((await rival.post(`/awards/${row.id}`, { class_name: 'X', students: 'Y' })).status, 403);
+  await teacher.post(`/awards/${row.id}`, { class_name: 'Year 3M', students: 'Marta, Renee' });
+  assert.strictEqual(db.prepare('SELECT grade_stage FROM awards WHERE id = ?').get(row.id).grade_stage, 'Year 3M');
+  assert.strictEqual((await post(`/awards/${row.id}/delete`, {})).status, 302, 'admin deletes any row');
+  assert.ok(!db.prepare('SELECT 1 FROM awards WHERE id = ?').get(row.id));
+
+  // Houses are manager-only; deleting a house removes its logo file.
+  assert.strictEqual((await teacher.post('/houses', { name: 'Rogue', points: '1' })).status, 403);
+  await post(`/houses/${phoenix.id}/delete`, {});
+  assert.ok(!fs.existsSync(path.join(config.uploadDir, logo)), 'logo file cleaned up');
+  db.prepare('DELETE FROM houses').run();
+  db.prepare("DELETE FROM users WHERE email IN ('award.teacher@test.local', 'other.teacher@test.local')").run();
+});
+
+test('a writer with the word cap lifted can write as long as they need', async () => {
+  const writer = await makeUser('Long Writer', 'long.writer@test.local', 'staff');
+  const wordy = Array.from({ length: 150 }, (_, i) => `word${i}`).join(' ');
+
+  // Capped by default...
+  let res = await writer.post('/news', { title: 'Long Story', body: wordy, section: 'primary' });
+  assert.strictEqual(res.status, 400);
+  assert.match(await res.text(), /limited to 100 words/);
+
+  // ...until an admin lifts the cap on the Users page.
+  const u = db.prepare("SELECT id FROM users WHERE email = 'long.writer@test.local'").get();
+  assert.strictEqual((await post(`/users/${u.id}/word-limit`, { unlimited: '1' })).status, 302);
+  res = await writer.post('/news', { title: 'Long Story', body: wordy, section: 'primary' });
+  assert.strictEqual(res.status, 302, 'exempt writer saves 150 words');
+  assert.ok(db.prepare("SELECT 1 FROM news WHERE title = 'Long Story'").get());
+  // Their article form drops the counter and says so.
+  const form = await (await writer.get('/news/new')).text();
+  assert.ok(!form.includes('data-word-limit'), 'no client-side cap for exempt writers');
+  assert.match(form, /no word limit for your account/);
+
+  // A capped editor can still edit the over-cap article - keep it or
+  // shorten it - but cannot make it longer.
+  const story = db.prepare("SELECT * FROM news WHERE title = 'Long Story'").get();
+  const words = (n) => Array.from({ length: n }, (_, i) => `word${i}`).join(' ');
+  let edit = await post(`/news/${story.id}`, { title: 'Long Story', body: wordy, section: 'primary' });
+  assert.strictEqual(edit.status, 302, 'capped editor saves the article at its current length');
+  edit = await post(`/news/${story.id}`, { title: 'Long Story', body: words(160), section: 'primary' });
+  assert.strictEqual(edit.status, 400, 'capped editor cannot grow it further');
+  assert.match(await edit.text(), /not make it longer/);
+  edit = await post(`/news/${story.id}`, { title: 'Long Story', body: words(120), section: 'primary' });
+  assert.strictEqual(edit.status, 302, 'capped editor may shorten it (even if still over 100)');
+
+  // Restoring the cap brings the rule back; other writers were never affected.
+  await post(`/users/${u.id}/word-limit`, { unlimited: '0' });
+  res = await writer.post('/news', { title: 'Long Two', body: wordy, section: 'primary' });
+  assert.strictEqual(res.status, 400);
+  assert.match(await (await get('/news/new')).text(), /max 100 words/);
+
+  db.prepare("DELETE FROM news WHERE title = 'Long Story'").run();
+  db.prepare("DELETE FROM users WHERE email = 'long.writer@test.local'").run();
+});
+
+test('bulk headshot import matches photos to staff by file name', async () => {
+  const sharp = require('sharp');
+  const config = require('../src/config');
+  const png = (bg) => sharp({ create: { width: 200, height: 260, channels: 3, background: bg } }).png().toBuffer();
+  const send = async (filename, extra = {}) => {
+    const form = new FormData();
+    form.append('_csrf', csrf);
+    form.append('name', filename);
+    for (const [k, v] of Object.entries(extra)) form.append(k, v);
+    form.append('photo', new Blob([await png('#334455')], { type: 'image/png' }), filename);
+    const res = await fetch(base + '/api/headshots/import', { method: 'POST', headers: { cookie: cookies }, body: form });
+    return res.json();
+  };
+  db.prepare("INSERT INTO users (email, name, password_hash, role) VALUES ('t.zipone@test.local', 'Tina Zip-One', '', 'staff')").run();
+  db.prepare("INSERT INTO users (email, name, password_hash, role) VALUES ('m.ziptwo@test.local', 'Mark Zip Two', '', 'staff')").run();
+
+  // Full name (with underscores and a copy suffix) and email-name forms both match.
+  assert.deepStrictEqual(await send('Tina_Zip-One (1).jpg'), { ok: true, matched: 'Tina Zip-One' });
+  const one = db.prepare("SELECT headshot FROM users WHERE email = 't.zipone@test.local'").get().headshot;
+  assert.ok(one && fs.existsSync(path.join(config.uploadDir, one)));
+  assert.deepStrictEqual(await send('m.ziptwo.png'), { ok: true, matched: 'Mark Zip Two' });
+
+  // No match and ambiguous names are skipped with a reason, never guessed.
+  assert.match((await send('Nobody Here.jpg')).reason, /no matching staff member/);
+  assert.match((await send('Zip.jpg')).reason, /matches 2 people/);
+
+  // Existing headshots are kept unless overwrite is ticked.
+  assert.match((await send('Tina Zip One.jpg')).reason, /already has a headshot/);
+  assert.strictEqual((await send('Tina Zip One.jpg', { overwrite: '1' })).ok, true);
+  assert.ok(!fs.existsSync(path.join(config.uploadDir, one)), 'replaced file is removed');
+
+  // The import page is linked and reachable for admins.
+  assert.match(await (await get('/users')).text(), /\/users\/headshots/);
+  assert.strictEqual((await get('/users/headshots')).status, 200);
+
+  for (const u of db.prepare("SELECT headshot FROM users WHERE email LIKE '%zip%@test.local'").all()) {
+    if (u.headshot) fs.rmSync(path.join(config.uploadDir, u.headshot), { force: true });
+  }
+  db.prepare("DELETE FROM users WHERE email LIKE '%zip%@test.local'").run();
+});
+
+test('principal portrait: pick a saved headshot, and last week\'s carries forward', async () => {
+  const sharp = require('sharp');
+  const config = require('../src/config');
+  const onDisk = (n) => n && fs.existsSync(path.join(config.uploadDir, n));
+  const png = await sharp({ create: { width: 220, height: 280, channels: 3, background: '#224466' } }).png().toBuffer();
+
+  // Snapshot the current week's message so this test leaves it untouched.
+  const { generationWeekStart } = require('../src/appweek');
+  const week = generationWeekStart();
+  const snapshot = db.prepare('SELECT * FROM principal_messages WHERE week_start = ?').get(week) || null;
+  db.prepare('DELETE FROM principal_messages WHERE week_start = ?').run(week);
+
+  // Give the admin account a saved headshot to pick from.
+  const adminRow = db.prepare("SELECT id FROM users WHERE email = 'admin@test.local'").get();
+  const form = new FormData();
+  form.append('_csrf', csrf);
+  form.append('headshot', new Blob([png], { type: 'image/png' }), 'principal.png');
+  await fetch(base + `/users/${adminRow.id}/headshot`, { method: 'POST', headers: { cookie: cookies }, body: form });
+  const headshot = db.prepare('SELECT headshot FROM users WHERE id = ?').get(adminRow.id).headshot;
+
+  // The page offers the picker; saving with a picked person copies their headshot.
+  assert.match(await (await get('/principal-message')).text(), /photo_user_id/);
+  const mpSave = new FormData();
+  mpSave.append('_csrf', csrf);
+  mpSave.append('body', 'Dear Parents, a fine week.');
+  mpSave.append('photo_user_id', String(adminRow.id));
+  const save = await fetch(base + '/principal-message', { method: 'POST', headers: { cookie: cookies }, body: mpSave, redirect: 'manual' });
+  assert.strictEqual(save.status, 302);
+  const withPick = db.prepare('SELECT photo FROM principal_messages WHERE week_start = ?').get(week);
+  assert.ok(withPick.photo && withPick.photo !== headshot && onDisk(withPick.photo), 'own copy of the headshot stored');
+
+  // A fresh week with nothing chosen reuses the latest previous portrait.
+  db.prepare("UPDATE principal_messages SET week_start = '2019-12-30' WHERE week_start = ?").run(week);
+  const mpPlain = new FormData();
+  mpPlain.append('_csrf', csrf);
+  mpPlain.append('body', 'Dear Parents, another week.');
+  await fetch(base + '/principal-message', { method: 'POST', headers: { cookie: cookies }, body: mpPlain, redirect: 'manual' });
+  const carried = db.prepare('SELECT photo FROM principal_messages WHERE week_start = ?').get(week);
+  assert.ok(carried.photo && carried.photo !== withPick.photo && onDisk(carried.photo), "last week's portrait carried forward as a copy");
+
+  // Cleanup: files, rows, headshot; restore the snapshot.
+  for (const f of [withPick.photo, carried.photo, headshot]) fs.rmSync(path.join(config.uploadDir, f), { force: true });
+  db.prepare("DELETE FROM principal_messages WHERE week_start IN ('2019-12-30', ?)").run(week);
+  db.prepare('UPDATE users SET headshot = NULL WHERE id = ?').run(adminRow.id);
+  if (snapshot) {
+    db.prepare(
+      'INSERT INTO principal_messages (week_start, body, quote, quote_author, photo, photo_mailchimp_url, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(snapshot.week_start, snapshot.body, snapshot.quote, snapshot.quote_author, snapshot.photo, snapshot.photo_mailchimp_url, snapshot.created_by);
+  }
+});
+
+// Keep this test LAST: recreating the admin row invalidates the shared session.
+test('seedAdmin re-syncs the configured admin account on every start', () => {
+  const bcrypt = require('bcryptjs');
+  // Password drifted (e.g. DB seeded before ADMIN_* variables were set).
+  db.prepare("UPDATE users SET password_hash = 'not-a-real-hash' WHERE email = 'admin@test.local'").run();
+  seedAdmin();
+  let row = db.prepare("SELECT * FROM users WHERE email = 'admin@test.local'").get();
+  assert.ok(bcrypt.compareSync('test-password', row.password_hash), 'password re-aligned with ADMIN_PASSWORD');
+
+  // Account missing entirely while other users exist.
+  db.prepare("DELETE FROM users WHERE email = 'admin@test.local'").run();
+  seedAdmin();
+  row = db.prepare("SELECT * FROM users WHERE email = 'admin@test.local'").get();
+  assert.ok(row, 'admin account recreated from ADMIN_EMAIL / ADMIN_PASSWORD');
+  assert.strictEqual(row.role, 'admin');
+  assert.ok(bcrypt.compareSync('test-password', row.password_hash));
+});

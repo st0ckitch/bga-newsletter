@@ -1,0 +1,98 @@
+<%- include('partials/head', { title: 'Settings' }) %>
+<div class="page-head"><h1>Settings</h1></div>
+<% if (saved) { %><div class="alert alert-ok">Settings saved - schedules have been reloaded.</div><% } %>
+<% if (errors.length) { %><div class="alert alert-error"><ul class="plain-list"><% errors.forEach(function(e){ %><li><%= e %></li><% }) %></ul></div><% } %>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Mailchimp</h2>
+    <p>
+      API connection: <strong><%= mailchimpConfigured ? 'configured ✅' : 'NOT configured ❌' %></strong><br>
+      <span class="muted">Parents audience: <code><%= audienceId || 'not set' %></code> · Teachers audience: <code><%= teachersAudienceId || 'not set' %></code></span>
+    </p>
+    <p class="muted">The API key, server prefix and audience IDs are set in <code>.env</code> on the server (they are secrets and are not editable here).</p>
+    <% if (testResult) { %>
+      <div class="alert <%= testResult.ok ? 'alert-ok' : 'alert-error' %>"><%= testResult.message %></div>
+    <% } %>
+    <form method="post" action="/settings/test-mailchimp">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <button class="btn btn-secondary">Test Mailchimp connection</button>
+    </form>
+
+    <h2 style="margin-top:22px;">Masthead background image</h2>
+    <p class="muted">Shown behind &quot;<%= settings.newsletter_name.toUpperCase() %>&quot; in the newsletter header. <strong>Recommended:</strong> a wide banner around <strong>1360 × 400 px</strong>, JPEG/PNG, under <strong>1 MB</strong>, <strong>dark</strong> (a deep shade of the school colour works best) so the white title stays readable. Email clients that block background images fall back to the plain brand-coloured header.</p>
+    <% if (mastheadPhoto) { %>
+      <div class="photo-grid"><div class="photo-tile">
+        <img src="/uploads/<%= mastheadPhoto %>" alt="Masthead background">
+      </div></div>
+      <div class="btn-row">
+        <form method="post" action="/settings/masthead-photo/delete" data-confirm="Remove the masthead background image? The header goes back to the plain brand colour.">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button class="btn btn-danger btn-sm">Remove background image</button>
+        </form>
+      </div>
+    <% } %>
+    <form method="post" action="/settings/masthead-photo" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <label><%= mastheadPhoto ? 'Replace it' : 'Upload one' %>
+        <input type="file" name="masthead" accept="image/jpeg,image/png,image/webp" required>
+      </label>
+      <button class="btn btn-secondary btn-sm" type="submit">Upload masthead image</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Schedule</h2>
+    <form method="post" action="/settings">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <label>Timezone
+        <input type="text" name="timezone" value="<%= settings.timezone %>">
+      </label>
+      <label>Monday reminder (cron)
+        <input type="text" name="monday_reminder_cron" value="<%= settings.monday_reminder_cron %>">
+      </label>
+      <label>Hard-deadline reminder (cron)
+        <input type="text" name="thursday_reminder_cron" value="<%= settings.thursday_reminder_cron %>">
+      </label>
+      <label>Newsletter generation → Mailchimp draft (cron)
+        <input type="text" name="friday_generate_cron" value="<%= settings.friday_generate_cron %>">
+      </label>
+      <p class="muted">Cron format: <code>minute hour day month weekday</code> (weekday 1 = Monday) - e.g. <code>0 18 * * 4</code> = Thursday 18:00. The generation time is also the submission cutoff: anything added after it rolls into the next issue.</p>
+
+      <h2>Reminders &amp; review</h2>
+      <label>Automatic reminder emails to teachers
+        <select name="auto_reminders">
+          <option value="0" <%= settings.auto_reminders === '1' ? '' : 'selected' %>>Off - do not send scheduled reminders</option>
+          <option value="1" <%= settings.auto_reminders === '1' ? 'selected' : '' %>>On - send on the Monday/deadline schedule</option>
+        </select>
+      </label>
+      <p class="muted">Keep this <strong>off</strong> while teacher accounts use group addresses - group emails cannot join a Mailchimp audience, so reminders would never arrive. Turn it on once individual staff emails are set under Users. The manual &quot;Send ... now&quot; buttons on the dashboard always work.</p>
+      <label>Newsletter editor email(s) - draft review notification
+        <input type="text" name="editor_email" value="<%= settings.editor_email %>" placeholder="editor@bga.ge, marketing@bga.ge">
+      </label>
+      <p class="muted">When the scheduled generation creates the draft, this person gets an email: &quot;the draft is ready - review it&quot;, with the warnings and a direct link to the Mailchimp draft. They curate the articles (include/exclude, live editor), regenerate if needed, and press Send in Mailchimp. Leave blank to disable.</p>
+
+      <h2>Newsletter identity</h2>
+      <label>Newsletter name
+        <input type="text" name="newsletter_name" value="<%= settings.newsletter_name %>">
+      </label>
+      <label>School name
+        <input type="text" name="school_name" value="<%= settings.school_name %>">
+      </label>
+      <label>“From” name on emails
+        <input type="text" name="from_name" value="<%= settings.from_name %>">
+      </label>
+      <label>Reply-to email
+        <input type="email" name="reply_to" value="<%= settings.reply_to %>">
+      </label>
+      <label>School calendar link (shown next to Upcoming Events)
+        <input type="url" name="calendar_url" value="<%= settings.calendar_url %>" placeholder="https://bga.ge/calendar">
+      </label>
+      <label>Footer staff directory (one per line: Name - Title)
+        <textarea name="footer_note" rows="5" placeholder="Nino Beridze - Principal&#10;Simon Rooney - Head of Primary"><%= settings.footer_note %></textarea>
+      </label>
+      <button type="submit" class="btn btn-primary">Save settings</button>
+    </form>
+  </div>
+</div>
+<%- include('partials/foot') %>

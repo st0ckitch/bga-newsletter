@@ -1,0 +1,99 @@
+<%- include('partials/head', { title: item && item.id ? 'Edit news' : 'New news' }) %>
+<div class="grid-2 grid-form-preview">
+<div class="card">
+  <h1><%= item && item.id ? 'Edit news article' : 'Add a news article' %></h1>
+  <% if (errors.length) { %><div class="alert alert-error"><ul class="plain-list"><% errors.forEach(function(e){ %><li><%= e %></li><% }) %></ul></div><% } %>
+  <form method="post" action="<%= item && item.id ? '/news/' + item.id : '/news' %>" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <label>Title *
+      <input type="text" name="title" value="<%= item ? item.title : '' %>" required maxlength="200" placeholder="e.g. Inter-School Friendly Tennis Tournament Success">
+    </label>
+    <label>Area *
+      <select name="section" required data-slots-control>
+        <% sections.forEach(function(s) { %>
+          <option value="<%= s %>" data-slots="<%= (sectionSlots[s] || contentSlots).join(',') %>" <%= item && item.section === s ? 'selected' : '' %>><%= sectionLabels[s] || s.replace('_', ' ') %></option>
+        <% }) %>
+      </select>
+    </label>
+    <p class="muted">The SLT member responsible for this area checks the story before it goes into the newsletter.</p>
+    <label>Article text * <%= maxWords ? '(max ' + maxWords + ' words)' : '(no word limit for your account)' %>
+      <textarea name="body" rows="10" required <%- maxWords ? 'data-word-limit="' + maxWords + '"' : '' %> placeholder="Write the article. Leave an empty line between paragraphs."><%= item ? item.body : '' %></textarea>
+    </label>
+    <% if (maxWords) { %><p class="muted"><span data-word-count></span></p><% } %>
+    <p class="muted"><strong>Links:</strong> just paste the URL - the words the sentence already uses become the
+    link and the long address disappears: <em>&quot;please complete this form: https://…&quot;</em> makes
+    <strong>this form</strong> clickable. With no such words nearby, the link shows as a short label
+    (<strong>Open in Google Drive ›</strong>). To pick the wording yourself, write
+    <code>[your words](https://…)</code>.</p>
+    <% if (isManager) { %>
+    <label>Template section
+      <select name="slot">
+        <% contentSlots.forEach(function(s) { %>
+          <option value="<%= s %>" <%= item && item.slot === s ? 'selected' : '' %>><%= slotLabels[s] %></option>
+        <% }) %>
+      </select>
+    </label>
+    <p class="muted">The area picks where a story lands <strong>by default</strong> - Whole School full width under
+    the header (W), Primary left (D/F/H), Secondary/Foundation right (E/G/I), Sixth Form (X) and Co-Curricular (Y)
+    below - but you can place it in <strong>any section</strong> here, and drag sections anywhere in the live preview.</p>
+    <% } else if (item && item.slot) { %>
+      <p class="muted">Template section: <strong><%= slotLabels[item.slot] || item.slot %></strong> - placement is set by the admin.</p>
+    <% } %>
+    <label>Photo of the section head (optional)
+      <input type="file" name="lead_photo" accept="image/jpeg,image/png,image/webp,image/gif">
+    </label>
+    <% if (savedHeadshots.length) { %>
+    <label>…or pick a saved staff headshot
+      <select name="lead_user_id">
+        <option value="">- none -</option>
+        <% savedHeadshots.forEach(function(p) { %>
+          <option value="<%= p.id %>"><%= p.name %></option>
+        <% }) %>
+      </select>
+    </label>
+    <% } %>
+    <p class="muted">A small portrait shown at the <strong>top of the article, beside the text</strong> - the same
+    treatment as the principal&#39;s photo. Use this for the head of the grade, not the photo grid below.<%
+    if (savedHeadshots.length) { %> Headshots uploaded once on the Staff accounts page appear in the dropdown,
+    so nobody has to re-upload the same portrait every week; a file chosen above wins over the dropdown.<% } %></p>
+    <% if (item && item.id && item.lead_photo) { %>
+      <div class="photo-tile photo-tile-inline">
+        <img src="/uploads/<%= item.lead_photo %>" alt="Section head photo" style="max-width:96px;">
+        <label class="muted"><input type="checkbox" name="remove_lead_photo" value="1"> remove this photo on save</label>
+      </div>
+    <% } %>
+    <label>Photos (JPEG/PNG/WebP/GIF, up to 4, max 10&nbsp;MB each)
+      <input type="file" name="photos" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
+    </label>
+    <p class="muted">These appear <strong>after the article text</strong>: the first becomes the large hero image,
+    the rest pair up in a two-column grid. Every photo is auto-cropped to the same 4:3 shape so rows line up.<br>
+    <strong>Recommended:</strong> landscape photos around <strong>1200 × 800 px</strong> (minimum 800 px wide), JPEG, under <strong>2 MB</strong> each - that is sharp on retina screens (photos run full-width on phones) and keeps the email fast to load. Phone photos work fine; avoid tiny thumbnails and heavy 10 MB originals.</p>
+    <div class="btn-row">
+      <button type="submit" class="btn btn-primary"><%= item && item.id ? 'Save changes' : 'Add article' %></button>
+      <a class="btn btn-secondary" href="/news">Cancel</a>
+    </div>
+  </form>
+
+  <% if (item && item.id && photos.length) { %>
+    <h2>Photos</h2>
+    <div class="photo-grid">
+      <% photos.forEach(function(p) { %>
+        <div class="photo-tile">
+          <img src="/uploads/<%= p.filename %>" alt="<%= p.original_name || 'photo' %>">
+          <form method="post" action="/photos/<%= p.id %>/delete" data-confirm="Remove this photo?">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <button class="btn btn-danger btn-sm">Remove</button>
+          </form>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+</div>
+
+<div class="card">
+  <div class="card-head-row"><h2>Live preview</h2></div>
+  <p class="muted">The article exactly as it will appear in the newsletter column - updates as you type. Photos show once selected; the first one becomes the hero image.</p>
+  <iframe id="article-preview" class="preview-frame" title="Article preview"></iframe>
+</div>
+</div>
+<%- include('partials/foot') %>

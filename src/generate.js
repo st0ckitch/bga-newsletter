@@ -1,0 +1,386 @@
+// Weekly aggregation: collects everything submitted for the week, renders the
+// newsletter HTML and creates/updates the draft campaign in Mailchimp.
+const fs = require('fs');
+const path = require('path');
+const { db, getSetting, setSetting } = require('./db');
+const { identity } = require('./brand');
+const config = require('./config');
+const { publicBaseUrl, isPublicUrl } = require('./baseurl');
+const mailchimp = require('./mailchimp');
+const { renderNewsletter } = require('./newsletter');
+const { generationWeekStart, generationDay } = require('./appweek');
+
+const { SECTIONS: SECTION_LABELS } = require('./sections');
+
+function collectWeekData(weekStart) {
+  const issueDate = generationDay(weekStart); // the day this week's issue is assembled/sent
+  // Upcoming events, including multi-day events that are already running.
+  const events = db
+    .prepare('SELECT * FROM events WHERE event_date >= ? OR (end_date IS NOT NULL AND end_date >= ?) ORDER BY event_date, created_at')
+    .all(issueDate, issueDate);
+  // A story reaches parents only once the SLT member for its area has
+  // checked it AND it has been kept in the issue during layout.
+  const news = db
+    .prepare("SELECT * FROM news WHERE week_start = ? AND included = 1 AND review_status = 'approved' ORDER BY sort_order, created_at")
+    .all(weekStart);
+  const photosByNews = {};
+  for (const n of news) {
+    photosByNews[n.id] = db.prepare('SELECT * FROM photos WHERE news_id = ? ORDER BY id').all(n.id);
+  }
+  const principalMessage = db.prepare('SELECT * FROM principal_messages WHERE week_start = ?').get(weekStart) || null;
+  // Stories that will miss this issue unless someone acts, so the report can
+  // name them instead of silently dropping them.
+  const awaitingReview = db
+    .prepare("SELECT id, title, section FROM news WHERE week_start = ? AND review_status = 'pending' ORDER BY created_at")
+    .all(weekStart);
+  const menus = db.prepare('SELECT * FROM menus ORDER BY id').all();
+  // House standings (leader first) and this week's Primary Awards rows.
+  const houses = db.prepare('SELECT * FROM houses ORDER BY points DESC, id').all();
+  const housePointsHidden = getSetting('house_points_visible') === '0';
+  const awards = db.prepare('SELECT * FROM awards WHERE week_start = ? ORDER BY id').all(weekStart);
+  const topicRow = db.prepare('SELECT title FROM award_topics WHERE week_start = ?').get(weekStart);
+  const awardTopic = topicRow ? topicRow.title : '';
+  return { weekStart, issueDate, events, news, photosByNews, principalMessage, awaitingReview, menus, houses, housePointsHidden, awards, awardTopic };
+}
+
+function photoPublicUrl(photo, baseUrl = publicBaseUrl()) {
+  if (photo.mailchimp_url) return photo.mailchimp_url;
+  return `${baseUrl}/uploads/${photo.filename}`;
+}
+
+// Push photos that have not been uploaded yet to the Mailchimp File Manager so
+// the campaign references CDN-hosted images.
+async function ensurePhotosUploaded(photos, warnings) {
+  const counts = { already: 0, uploaded: 0, failed: 0 };
+  if (!mailchimp.isConfigured()) return counts;
+  for (const photo of photos) {
+    if (photo.mailchimp_url) {
+      counts.already += 1;
+      continue;
+    }
+    try {
+      const filePath = path.join(config.uploadDir, photo.filename);
+      const buffer = fs.readFileSync(filePath);
+      const url = await mailchimp.uploadFile(photo.filename, buffer);
+      db.prepare('UPDATE photos SET mailchimp_url = ? WHERE id = ?').run(url, photo.id);
+      photo.mailchimp_url = url;
+      counts.uploaded += 1;
+    } catch (err) {
+      counts.failed += 1;
+      warnings.push(`Photo "${photo.original_name || photo.filename}" could not be uploaded to Mailchimp: ${err.message}`);
+    }
+  }
+  return counts;
+}
+
+// Head-of-grade portraits live on the news row itself; push any that are
+// not on the CDN yet, mirroring ensurePhotosUploaded.
+async function ensureLeadPhotosUploaded(news, warnings) {
+  if (!mailchimp.isConfigured()) return;
+  for (const n of news) {
+    if (!n.lead_photo || n.lead_photo_mailchimp_url) continue;
+    try {
+      const buffer = fs.readFileSync(path.join(config.uploadDir, n.lead_photo));
+      const url = await mailchimp.uploadFile(n.lead_photo, buffer);
+      db.prepare('UPDATE news SET lead_photo_mailchimp_url = ? WHERE id = ?').run(url, n.id);
+      n.lead_photo_mailchimp_url = url;
+    } catch (err) {
+      warnings.push(`The section-head photo on "${n.title}" could not be uploaded to Mailchimp: ${err.message}`);
+    }
+  }
+}
+
+// House crests live on the houses row; push any not on the CDN yet,
+// mirroring ensureLeadPhotosUploaded.
+async function ensureHouseLogosUploaded(houses, warnings) {
+  if (!mailchimp.isConfigured()) return;
+  for (const h of houses) {
+    if (!h.logo || h.logo_mailchimp_url) continue;
+    try {
+      const buffer = fs.readFileSync(path.join(config.uploadDir, h.logo));
+      const url = await mailchimp.uploadFile(h.logo, buffer);
+      db.prepare('UPDATE houses SET logo_mailchimp_url = ? WHERE id = ?').run(url, h.id);
+      h.logo_mailchimp_url = url;
+    } catch (err) {
+      warnings.push(`The logo of house "${h.name}" could not be uploaded to Mailchimp: ${err.message}`);
+    }
+  }
+}
+
+// baseUrl: absolute (config.appBaseUrl) for the Mailchimp draft - email
+// clients need full URLs - and '' for the in-panel preview, so preview
+// images and fonts resolve relative to the panel itself and work on any
+// host even before APP_BASE_URL is configured.
+function buildRenderData(data, { placeholders = false, editable = false, csrf = '', baseUrl = publicBaseUrl() } = {}) {
+  const articles = data.news.map((n) => ({
+    id: n.id,
+    title: n.title,
+    body: n.body,
+    slot: n.slot,
+    sectionLabel: SECTION_LABELS[n.section] || '',
+    leadPhotoUrl: n.lead_photo ? n.lead_photo_mailchimp_url || `${baseUrl}/uploads/${n.lead_photo}` : null,
+    photos: (data.photosByNews[n.id] || []).map((p) => ({ id: p.id, url: photoPublicUrl(p, baseUrl) })),
+  }));
+
+  const mastheadPhoto = getSetting('masthead_photo');
+  return {
+    newsletterName: getSetting('newsletter_name'),
+    schoolName: getSetting('school_name'),
+    mastheadUrl: mastheadPhoto
+      ? getSetting('masthead_photo_mailchimp_url') || `${baseUrl}/uploads/${mastheadPhoto}`
+      : null,
+    issueDate: data.issueDate,
+    quote:
+      data.principalMessage && data.principalMessage.quote
+        ? { text: data.principalMessage.quote, author: data.principalMessage.quote_author, weekStart: data.weekStart }
+        : null,
+    menus: data.menus || [],
+    houses: (data.houses || []).map((h) => ({
+      ...h,
+      logoUrl: h.logo ? h.logo_mailchimp_url || `${baseUrl}/uploads/${h.logo}` : null,
+    })),
+    housePointsHidden: Boolean(data.housePointsHidden),
+    awards: data.awards || [],
+    awardTopic: data.awardTopic || '',
+    events: data.events,
+    principalMessage: data.principalMessage
+      ? {
+          body: data.principalMessage.body,
+          weekStart: data.weekStart,
+          photoUrl: data.principalMessage.photo
+            ? data.principalMessage.photo_mailchimp_url || `${baseUrl}/uploads/${data.principalMessage.photo}`
+            : null,
+        }
+      : null,
+    articles,
+    footerNote: getSetting('footer_note'),
+    calendarUrl: getSetting('calendar_url'),
+    fontBase: baseUrl,
+    placeholders,
+    editable,
+    csrf,
+  };
+}
+
+// Generates the issue for the given week (defaults to the current week):
+// renders HTML, creates or updates the Mailchimp draft campaign, and records
+// the result in the issues table. Never sends the campaign - staff review the
+// draft in Mailchimp and press send themselves.
+async function generateIssue({ weekStart, trigger = 'manual' } = {}) {
+  weekStart = weekStart || generationWeekStart();
+  const warnings = [];
+  // Step-by-step diagnostic shown on the generation report page, so it is
+  // obvious whether the draft really landed in Mailchimp and why not if it
+  // did not.
+  const steps = [];
+  const step = (ok, label, detail) => steps.push({ ok, label, detail: detail || null });
+  const data = collectWeekData(weekStart);
+
+  if (!data.principalMessage) warnings.push("No principal's message was submitted this week.");
+  if (data.news.length === 0) warnings.push('No news articles were submitted this week.');
+  if (data.events.length === 0) warnings.push('There are no upcoming events on or after the issue date.');
+
+  step(
+    true,
+    'Content collected',
+    `${data.news.length} article(s), ${data.events.length} upcoming event(s), principal's message ${
+      data.principalMessage ? 'present' : 'MISSING'
+    }, week of ${weekStart}`
+  );
+  if (data.awaitingReview.length) {
+    const list = data.awaitingReview
+      .map((n) => `"${n.title}" (${SECTION_LABELS[n.section] || n.section})`)
+      .join(', ');
+    warnings.push(
+      `${data.awaitingReview.length} story/stories are still waiting for their SLT check and were left out: ${list}`
+    );
+    step(false, 'SLT check on submitted stories', `${data.awaitingReview.length} still awaiting a decision - left out of this issue: ${list}`);
+  } else {
+    step(true, 'SLT check on submitted stories', 'every story for this week has been checked');
+  }
+  step(
+    mailchimp.isConfigured(),
+    'Mailchimp API key',
+    mailchimp.isConfigured()
+      ? `configured (server "${config.mailchimp.serverPrefix}")`
+      : 'MAILCHIMP_API_KEY / MAILCHIMP_SERVER_PREFIX missing in .env'
+  );
+  step(
+    Boolean(config.mailchimp.audienceId),
+    'Parents audience ID',
+    config.mailchimp.audienceId || 'MAILCHIMP_AUDIENCE_ID missing in .env - run: npm run mailchimp:setup'
+  );
+  // Email clients need absolute URLs for the webfonts and for any photo that
+  // is not on the Mailchimp CDN - a localhost base means those break in the
+  // sent email.
+  const resolvedBase = publicBaseUrl();
+  const basePublic = isPublicUrl(resolvedBase);
+  step(
+    basePublic,
+    'Public app URL (APP_BASE_URL)',
+    basePublic
+      ? resolvedBase
+      : `${resolvedBase} - not reachable from the internet. Set APP_BASE_URL to your public URL (e.g. ${identity.publicUrlExample}) so fonts and photos load in the email.`
+  );
+  if (mailchimp.isConfigured()) {
+    try {
+      const pong = await mailchimp.ping();
+      step(true, 'Mailchimp API connection', `reachable (${(pong && pong.health_status) || 'healthy'})`);
+    } catch (err) {
+      step(false, 'Mailchimp API connection', err.message);
+    }
+  }
+
+  const allPhotos = Object.values(data.photosByNews).flat();
+  const photoCounts = await ensurePhotosUploaded(allPhotos, warnings);
+  await ensureLeadPhotosUploaded(data.news, warnings);
+  await ensureHouseLogosUploaded(data.houses, warnings);
+  if (allPhotos.length || (data.principalMessage && data.principalMessage.photo)) {
+    step(
+      photoCounts.failed === 0,
+      'Photos on the Mailchimp CDN',
+      mailchimp.isConfigured()
+        ? `${photoCounts.uploaded} uploaded now, ${photoCounts.already} already hosted, ${photoCounts.failed} failed (of ${allPhotos.length})`
+        : 'skipped - Mailchimp not configured, photos will use local links'
+    );
+  }
+
+  // The principal's portrait moves to the Mailchimp CDN the same way.
+  const pm = data.principalMessage;
+  if (mailchimp.isConfigured() && pm && pm.photo && !pm.photo_mailchimp_url) {
+    try {
+      const buffer = fs.readFileSync(path.join(config.uploadDir, pm.photo));
+      const url = await mailchimp.uploadFile(pm.photo, buffer);
+      db.prepare('UPDATE principal_messages SET photo_mailchimp_url = ? WHERE id = ?').run(url, pm.id);
+      pm.photo_mailchimp_url = url;
+    } catch (err) {
+      warnings.push(`The principal's photo could not be uploaded to Mailchimp: ${err.message}`);
+    }
+  }
+  // The masthead background image is CDN-hosted the same way.
+  const mastheadPhoto = getSetting('masthead_photo');
+  if (mailchimp.isConfigured() && mastheadPhoto && !getSetting('masthead_photo_mailchimp_url')) {
+    try {
+      const buffer = fs.readFileSync(path.join(config.uploadDir, mastheadPhoto));
+      const url = await mailchimp.uploadFile(mastheadPhoto, buffer);
+      setSetting('masthead_photo_mailchimp_url', url);
+    } catch (err) {
+      warnings.push(`The masthead background image could not be uploaded to Mailchimp: ${err.message}`);
+    }
+  }
+
+  const localPhotos = allPhotos.filter((p) => !p.mailchimp_url);
+  if (localPhotos.length && mailchimp.isConfigured()) {
+    warnings.push(
+      `${localPhotos.length} photo(s) are not on the Mailchimp CDN; the draft links to ${publicBaseUrl()}/uploads/… ` +
+        'which must be publicly reachable for parents to see them.'
+    );
+  }
+
+  const html = renderNewsletter(buildRenderData(data));
+
+  // Every image in the sent email should live on the Mailchimp CDN - a
+  // self-hosted straggler (a failed upload) renders differently across email
+  // clients and can show as a blocked/downloadable file instead of a photo.
+  // Regenerating retries the uploads, so surface leftovers loudly.
+  if (mailchimp.isConfigured()) {
+    const selfHosted = (html.match(/src="[^"]*\/uploads\//g) || []).length;
+    step(
+      selfHosted === 0,
+      'All images on the Mailchimp CDN',
+      selfHosted === 0
+        ? 'every image in the draft is CDN-hosted'
+        : `${selfHosted} image(s) still link to ${publicBaseUrl()}/uploads/… - the upload failed (see warnings). Generate the draft again to retry.`
+    );
+  }
+
+  let campaignId = null;
+  let campaignWebUrl = null;
+  let status = 'local_only';
+
+  if (!mailchimp.isConfigured()) {
+    warnings.push('Mailchimp is not configured - the draft was saved locally but no Mailchimp campaign was created.');
+    step(false, 'Draft campaign in Mailchimp', 'NOT created - Mailchimp is not configured');
+  } else if (!config.mailchimp.audienceId) {
+    warnings.push('MAILCHIMP_AUDIENCE_ID is not set - no Mailchimp campaign was created.');
+    step(false, 'Draft campaign in Mailchimp', 'NOT created - MAILCHIMP_AUDIENCE_ID is not set');
+  } else {
+    const subject = `${getSetting('newsletter_name')} - ${getSetting('school_name')} Weekly Newsletter`;
+    const title = `${getSetting('newsletter_name')} ${data.issueDate}`;
+    const existing = db
+      .prepare('SELECT * FROM issues WHERE week_start = ? AND campaign_id IS NOT NULL ORDER BY id DESC')
+      .get(weekStart);
+    try {
+      if (existing) {
+        // Re-generation: try to refresh the existing draft in place.
+        try {
+          await mailchimp.setCampaignContent(existing.campaign_id, html);
+          campaignId = existing.campaign_id;
+          campaignWebUrl = existing.campaign_web_url;
+        } catch (err) {
+          warnings.push(`Existing draft could not be updated (${err.message}); a new draft was created instead.`);
+        }
+      }
+      if (!campaignId) {
+        const campaign = await mailchimp.createCampaign({
+          listId: config.mailchimp.audienceId,
+          subject,
+          title,
+          fromName: getSetting('from_name'),
+          replyTo: getSetting('reply_to') || identity.replyTo,
+        });
+        await mailchimp.setCampaignContent(campaign.id, html);
+        campaignId = campaign.id;
+        campaignWebUrl = mailchimp.campaignEditUrl(campaign);
+      }
+      status = 'draft_created';
+      step(
+        true,
+        'Draft campaign in Mailchimp',
+        `${existing && campaignId === existing.campaign_id ? 'existing draft updated' : 'created'} (campaign id ${campaignId}) - review and send it from Mailchimp`
+      );
+    } catch (err) {
+      warnings.push(`Mailchimp draft creation failed: ${err.message}`);
+      step(false, 'Draft campaign in Mailchimp', `FAILED - ${err.message}`);
+    }
+  }
+
+  const existingRow = db.prepare('SELECT id FROM issues WHERE week_start = ?').get(weekStart);
+  if (existingRow) {
+    // A rebuilt issue is a different letter: any earlier approval no longer
+    // covers it, so the principal proof-reads the new version.
+    db.prepare(
+      `UPDATE issues SET generated_at = datetime('now'), campaign_id = COALESCE(?, campaign_id),
+       campaign_web_url = COALESCE(?, campaign_web_url), html = ?, status = ?, warnings = ?,
+       approved_by = NULL, approved_at = NULL WHERE id = ?`
+    ).run(campaignId, campaignWebUrl, html, status, JSON.stringify(warnings), existingRow.id);
+  } else {
+    db.prepare(
+      'INSERT INTO issues (week_start, campaign_id, campaign_web_url, html, status, warnings) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(weekStart, campaignId, campaignWebUrl, html, status, JSON.stringify(warnings));
+  }
+
+  step(
+    false,
+    "Principal's approval to send",
+    'not yet given - the draft waits in Mailchimp until the principal has proof-read it and pressed Approve on the Issues page'
+  );
+
+  console.log(
+    `[generate] Issue for week ${weekStart} generated (${trigger}); status=${status}` +
+      (warnings.length ? `; warnings: ${warnings.join(' | ')}` : '')
+  );
+  return {
+    weekStart,
+    issueDate: data.issueDate,
+    html,
+    status,
+    campaignId,
+    campaignWebUrl,
+    warnings,
+    steps,
+    awaitingReview: data.awaitingReview,
+  };
+}
+
+module.exports = { generateIssue, collectWeekData, buildRenderData, SECTION_LABELS };

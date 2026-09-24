@@ -1,0 +1,182 @@
+@font-face { font-family: 'FiraGO'; font-style: normal; font-weight: 300; font-display: swap; src: url('/fonts/FiraGO-Light.woff2') format('woff2'); }
+@font-face { font-family: 'FiraGO'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/FiraGO-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'FiraGO'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/FiraGO-SemiBold.woff2') format('woff2'); }
+@font-face { font-family: 'FiraGO'; font-style: normal; font-weight: 800; font-display: swap; src: url('/fonts/FiraGO-Heavy.woff2') format('woff2'); }
+
+/* The BGA palette. These four brand values are the ones from src/brand.js -
+   `npm test` checks that the two files agree, so change them in both (or
+   change brand.js and let the failing test tell you). */
+:root {
+  --brand: #12306b;
+  --brand-deep: #0a1c45;
+  --accent: #d8232a;
+  --accent-deep: #a3151b;
+  --page: #f5f6f8;
+  --ink: #3a4258;
+  --muted: #6b7280;
+  --border: #e2e5ea;
+  --red: #c4432e;
+  --ok: #2e7d52;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'FiraGO', 'Fira Sans', 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-weight: 300;
+  background: var(--page);
+  color: var(--ink);
+}
+
+.topbar { background: var(--brand-deep); border-bottom: 4px solid var(--accent); }
+.topbar-inner {
+  max-width: 1180px; margin: 0 auto; padding: 0 20px;
+  display: flex; align-items: center; gap: 24px; min-height: 58px; flex-wrap: wrap;
+}
+.brand {
+  font-family: inherit; font-weight: 800; letter-spacing: 3px; font-size: 19px;
+  color: #fff; text-decoration: none; white-space: nowrap;
+}
+.brand span { color: var(--accent); font-size: 12px; letter-spacing: 1px; }
+.topbar nav { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+.topbar nav a {
+  color: #c7d0e4; text-decoration: none; font-size: 13.5px; padding: 8px 10px; border-radius: 6px;
+}
+.topbar nav a:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.topbar-user { display: flex; align-items: center; gap: 10px; color: #c7d0e4; font-size: 13px; }
+
+.container { max-width: 1180px; margin: 26px auto 60px auto; padding: 0 20px; }
+
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.page-head h1 { margin: 0; color: var(--brand); font-size: 28px; }
+.page-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.page-actions form { margin: 0; }
+
+h1, h2, h3 { color: var(--brand); font-family: inherit; font-weight: 800; }
+b, strong { font-weight: 600; }
+.card h2 { font-size: 19px; margin-top: 0; }
+.card h3 { font-size: 15px; margin-bottom: 6px; }
+
+.card {
+  background: #fff; border: 1px solid var(--border); border-radius: 14px;
+  padding: 22px 24px; margin-bottom: 20px;
+}
+.card-narrow { max-width: 760px; }
+.card-head-row { display: flex; justify-content: space-between; align-items: center; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.muted { color: var(--muted); font-size: 13.5px; }
+.plain-list { list-style: none; margin: 6px 0; padding: 0; }
+.plain-list li { padding: 3px 0; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; padding: 8px 10px; border-bottom: 2px solid var(--border); }
+.table td { padding: 10px; border-bottom: 1px solid #eef0f4; vertical-align: middle; }
+.row-current td { background: #eef2fa; }
+.row-actions { display: flex; gap: 6px; align-items: center; }
+.row-actions form { margin: 0; }
+
+.tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.tag-primary { background: #e4ecfa; color: #2c56a4; }
+.tag-secondary { background: #f6ecd9; color: #8a6210; }
+.tag-principal { background: #ece4fa; color: #5b3ea4; }
+.tag-admin { background: #e3e6ec; color: #394356; }
+.tag-whole_school { background: #e2f0e8; color: #24684a; }
+.tag-sixth_form { background: #e7e2fa; color: #4a3aa4; }
+.tag-co_curricular { background: #fbe6dd; color: #a2512a; }
+.tag-staff { background: #e4ecfa; color: #2c56a4; }
+.tag-slt { background: #dfe4f5; color: var(--brand); }
+.tag-marketing { background: #fdeccb; color: #8a6210; }
+/* SLT review state */
+.tag-approved { background: #e2f0e8; color: #24684a; }
+.tag-pending { background: #fdeccb; color: #8a6210; }
+.tag-rejected { background: #fadcd9; color: #a3312a; }
+.btn-row-tight { gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.input-sm { padding: 4px 8px; font-size: 12px; width: 130px; }
+
+label { display: block; margin: 0 0 14px 0; font-weight: 600; font-size: 14px; color: var(--brand); }
+input[type="text"], input[type="email"], input[type="password"], input[type="date"], select, textarea {
+  display: block; width: 100%; margin-top: 6px; padding: 10px 12px;
+  border: 1px solid #cfd5de; border-radius: 8px; font-size: 14.5px; font-family: inherit;
+  background: #ffffff; color: var(--ink);
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .field-row { grid-template-columns: 1fr; } }
+
+.btn {
+  display: inline-block; border: none; cursor: pointer; text-decoration: none;
+  font-size: 14px; font-weight: 600; padding: 10px 18px; border-radius: 8px; font-family: inherit;
+}
+.btn-primary { background: var(--brand); color: #fff; border-bottom: 3px solid var(--accent-deep); }
+.btn-primary:hover { background: var(--brand-deep); }
+.btn-secondary { background: #fff; color: var(--brand); border: 1px solid var(--brand); }
+.btn-secondary:hover { background: #eef2fa; }
+.btn-ghost { background: transparent; color: var(--brand); border: 1px solid var(--border); }
+.btn-ghost:hover { background: #eef0f4; }
+/* On the dark top bar the ghost button needs light-on-dark instead. */
+.topbar .btn-ghost { color: #ffffff; border-color: rgba(255,255,255,0.35); }
+.topbar .btn-ghost:hover { background: rgba(255,255,255,0.12); }
+.btn-danger { background: #fff; color: var(--red); border: 1px solid var(--red); }
+.btn-danger:hover { background: #fbeeec; }
+.btn-sm { padding: 5px 10px; font-size: 12.5px; }
+.btn-block { width: 100%; }
+.btn-row { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.btn-row form { margin: 0; }
+
+.alert { border-radius: 10px; padding: 12px 16px; margin: 0 0 16px 0; font-size: 14px; }
+.alert-error { background: #fbeeec; color: #93301f; border: 1px solid #eccac3; }
+.alert-warn { background: #fdf6e4; color: #7a5a10; border: 1px solid #ecdcae; }
+.alert-ok { background: #e9f5ee; color: #1d5c3e; border: 1px solid #c2e0cf; }
+
+.inline-form { display: flex; gap: 6px; align-items: center; margin: 0; }
+.inline-form input { margin: 0; width: 170px; padding: 6px 10px; font-size: 13px; }
+
+.preview-frame {
+  width: 100%; height: 640px; border: 1px solid var(--border); border-radius: 12px; background: #fff;
+}
+.preview-frame-tall { height: 1100px; }
+/* News form + live article preview side by side; preview follows the scroll. */
+.grid-form-preview { grid-template-columns: 1.15fr 1fr; align-items: start; }
+.grid-form-preview .card:last-child { position: sticky; top: 16px; }
+@media (max-width: 900px) { .grid-form-preview { grid-template-columns: 1fr; } .grid-form-preview .card:last-child { position: static; } }
+
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; margin-top: 10px; }
+.photo-tile img { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+.photo-tile form { margin-top: 6px; }
+
+.login-wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; }
+.login-card { width: 380px; max-width: 92vw; padding: 34px 32px; border-top: 5px solid var(--accent); }
+.login-brand { font-weight: 800; letter-spacing: 5px; text-align: center; margin: 0; color: var(--brand); }
+.login-sub { text-align: center; color: var(--muted); margin: 6px 0 22px 0; }
+
+.row-excluded td { opacity: 0.55; }
+.tag-slot { background: #f6ecd9; color: #8a6210; font-weight: 800; }
+.slot-select { max-width: 210px; padding: 5px 8px; font-size: 12.5px; margin: 0; display: inline-block; width: auto; }
+
+/* ---------------- phones ----------------
+   The panel is used from phones between lessons: the menu collapses into one
+   swipeable row instead of a screen-high stack, and wide tables scroll
+   sideways inside their card instead of cutting off at the screen edge. */
+@media (max-width: 720px) {
+  .topbar-inner { padding: 10px 12px; gap: 6px 10px; min-height: 0; }
+  .brand { font-size: 16px; letter-spacing: 2px; margin-right: auto; }
+  .topbar-user { font-size: 12px; gap: 8px; min-width: 0; }
+  .topbar-user span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 38vw; }
+  .topbar nav { order: 3; flex-basis: 100%; flex-wrap: nowrap; overflow-x: auto; gap: 0; padding-bottom: 6px; scrollbar-width: none; }
+  .topbar nav::-webkit-scrollbar { display: none; }
+  .topbar nav a { white-space: nowrap; font-size: 13px; padding: 6px 9px; }
+
+  .container { margin: 16px auto 44px auto; padding: 0 12px; }
+  .card { padding: 16px 14px; border-radius: 12px; }
+  .page-head h1 { font-size: 23px; }
+
+  .table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table th, .table td { padding: 8px; }
+  .row-actions, .inline-form { flex-wrap: wrap; }
+
+  /* 16px inputs stop iOS Safari zooming the page on every focused field. */
+  input[type="text"], input[type="email"], input[type="password"], input[type="date"],
+  input[type="number"], input[type="url"], select, textarea { font-size: 16px; }
+}
