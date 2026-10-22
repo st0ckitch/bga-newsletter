@@ -477,7 +477,7 @@ function renderArticle(article, barColor, slotLetter, editable) {
   )}>${escapeHtml(article.title)}</span></td>
             ${
               article.sectionLabel
-                ? `<td align="right" valign="top" style="font-family:${SANS}; font-size:8px; font-weight:600; letter-spacing:2px; color:#ffffff; opacity:0.75; padding-left:8px; white-space:nowrap;">${escapeHtml(
+                ? `<td align="right" valign="top" style="font-family:${SANS}; font-size:11px; font-weight:700; letter-spacing:2px; color:#ffffff; opacity:0.95; padding-left:8px; white-space:nowrap;">${escapeHtml(
                     article.sectionLabel.toUpperCase()
                   )}</td>`
                 : ''
@@ -546,7 +546,7 @@ function renderMenusBlock(menus, placeholders) {
       <tr>
         <td style="background:${BRAND}; border-radius:10px; padding:14px 16px 16px 16px;">
           <p style="margin:0; font-family:${SANS}; font-size:10px; font-weight:600; letter-spacing:3px; color:${ACCENT};">SCHOOL MENUS</p>
-          <p style="margin:6px 0 0 0; font-family:${SANS}; font-size:12.5px; color:${ACCENT_SOFT};">What&rsquo;s on the table this week &mdash; pick your year group:</p>
+          <p style="margin:6px 0 0 0; font-family:${SANS}; font-size:12.5px; color:${ACCENT_SOFT};">What&rsquo;s on the table this week - pick your year group:</p>
           ${buttons}
         </td>
       </tr>
