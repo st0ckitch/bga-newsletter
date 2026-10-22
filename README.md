@@ -61,6 +61,12 @@ SLT member responsible for checking its stories (assigned under **Users**).
 Everyone gets their own login. Accounts are created under **Users** (or with
 `npm run create-user`).
 
+## Staff guide
+
+A three-page illustrated guide for staff - logging in, writing stories,
+adding events, SLT checks, layout and approval - is in
+[`guide/BGA-Newsletter-Staff-Guide.pdf`](guide/BGA-Newsletter-Staff-Guide.pdf).
+
 ## Branding
 
 Everything that carries the school's name or colours reads from
