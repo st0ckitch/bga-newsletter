@@ -2,12 +2,77 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BGA Newsletter</title>
-  <!-- GitHub Pages entry point: the interactive demo lives in docs/. -->
-  <meta http-equiv="refresh" content="0; url=docs/">
-  <link rel="canonical" href="docs/">
+  <!--
+    GitHub Pages front door: https://st0ckitch.github.io/bga-newsletter
+
+    GitHub Pages only serves fixed files, so the platform itself (logins,
+    database, photo uploads, the Thursday build, Mailchimp) runs on the
+    server - this page just sends people there. Put the server's public
+    address below; 404.html carries the same address so deep links
+    (…/bga-newsletter/news/new) land on the same page of the platform.
+    `npm test` checks the two agree. Leave it empty and this page opens the
+    click-through demo instead.
+  -->
+  <meta name="bga-app-url" content="">
+  <style>
+    @font-face { font-family: FiraGO; font-weight: 300; src: url('public/fonts/FiraGO-Light.woff2') format('woff2'); }
+    @font-face { font-family: FiraGO; font-weight: 600; src: url('public/fonts/FiraGO-SemiBold.woff2') format('woff2'); }
+    @font-face { font-family: FiraGO; font-weight: 800; src: url('public/fonts/FiraGO-Heavy.woff2') format('woff2'); }
+    :root { --brand: #12306b; --brand-deep: #0a1c45; --accent: #d8232a; --soft: #dfe4ee; --muted: #6b7280; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px;
+      background: var(--brand-deep); color: #fff; font-family: FiraGO, 'Segoe UI', Helvetica, Arial, sans-serif; font-weight: 300; }
+    .card { width: 420px; max-width: 100%; background: #fff; color: #3a4258; border-radius: 16px; border-top: 6px solid var(--accent);
+      padding: 34px 30px 26px; text-align: center; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35); }
+    h1 { margin: 0; color: var(--brand); font-weight: 800; letter-spacing: 5px; font-size: 30px; line-height: 1.1; }
+    .sub { margin: 8px 0 22px; color: var(--muted); font-size: 15px; }
+    .btn { display: block; background: var(--brand); color: #fff; text-decoration: none; font-weight: 600; font-size: 16px;
+      padding: 14px 18px; border-radius: 10px; border-bottom: 3px solid var(--accent); }
+    .btn:hover { background: var(--brand-deep); }
+    .status { margin: 16px 0 0; font-size: 14px; color: var(--muted); min-height: 20px; }
+    .links { margin-top: 20px; padding-top: 16px; border-top: 1px solid #e2e5ea; font-size: 14px; }
+    .links a { color: var(--brand); font-weight: 600; text-decoration: none; margin: 0 8px; }
+    .links a:hover { text-decoration: underline; }
+    [hidden] { display: none !important; }
+  </style>
 </head>
 <body>
-  <p>Opening the <a href="docs/">BGA Newsletter demo</a>&hellip;</p>
+  <main class="card">
+    <h1>BGA<br>NEWSLETTER</h1>
+    <p class="sub">British-Georgian Academy &middot; staff platform</p>
+
+    <div data-when="live" hidden>
+      <a class="btn" data-app-link href="#">Open the newsletter platform</a>
+      <p class="status">Opening the platform&hellip;</p>
+    </div>
+
+    <div data-when="demo">
+      <a class="btn" href="docs/">Open the demo</a>
+      <p class="status">The live platform's address hasn't been connected to this page yet.</p>
+    </div>
+
+    <div class="links">
+      <a href="guide/BGA-Newsletter-Staff-Guide.pdf">Staff guide (PDF)</a>
+      <a href="docs/" data-demo-link hidden>Try the demo</a>
+    </div>
+  </main>
+  <script>
+    (function () {
+      var app = (document.querySelector('meta[name="bga-app-url"]').content || '').trim().replace(/\/+$/, '');
+      var stay = /[?&]stay\b/.test(location.search); // ?stay shows this page without forwarding
+      if (!app) {
+        if (!stay) location.replace('docs/');
+        return;
+      }
+      document.querySelector('[data-when="demo"]').hidden = true;
+      document.querySelector('[data-when="live"]').hidden = false;
+      document.querySelector('[data-demo-link]').hidden = false;
+      var target = app + '/' + location.hash;
+      document.querySelector('[data-app-link]').href = target;
+      if (!stay) location.replace(target);
+    })();
+  </script>
 </body>
 </html>
