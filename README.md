@@ -64,8 +64,12 @@ Everyone gets their own login. Accounts are created under **Users** (or with
 ## Staff guide
 
 A three-page illustrated guide for staff - logging in, writing stories,
-adding events, SLT checks, layout and approval - is in
-[`guide/BGA-Newsletter-Staff-Guide.pdf`](guide/BGA-Newsletter-Staff-Guide.pdf).
+adding events, SLT checks, layout and approval - in English,
+[`guide/BGA-Newsletter-Staff-Guide.pdf`](guide/BGA-Newsletter-Staff-Guide.pdf),
+and Georgian,
+[`guide/BGA-Newsletter-Staff-Guide-KA.pdf`](guide/BGA-Newsletter-Staff-Guide-KA.pdf).
+Both send staff to https://st0ckitch.github.io/bga-newsletter, which opens
+the platform once its address is set in `index.html` and `404.html`.
 
 ## Branding
 
