@@ -30,6 +30,7 @@ Cost on any option below: roughly **$5-7/month**.
    | `SESSION_SECRET` | any long random string |
    | `ADMIN_EMAIL` | your login email |
    | `ADMIN_PASSWORD` | your login password |
+   | `STAFF_ACCOUNTS` | optional: staff to add under Users, one `Name,email,role` per line |
    | `MAILCHIMP_API_KEY` | your Mailchimp API key |
    | `MAILCHIMP_SERVER_PREFIX` | `us1` |
    | `MAILCHIMP_AUDIENCE_ID` | your parents audience ID |

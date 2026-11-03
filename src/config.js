@@ -21,6 +21,9 @@ module.exports = {
   dataDir,
   dbPath: path.join(dataDir, 'newsletter.sqlite'),
   uploadDir: path.join(dataDir, 'uploads'),
+  // Staff to add to the Users page on start, waiting for their invitation -
+  // see src/staff-seed.js. Kept on the host so the addresses stay private.
+  staffAccounts: process.env.STAFF_ACCOUNTS || '',
   admin: {
     email: process.env.ADMIN_EMAIL || identity.adminEmail,
     name: process.env.ADMIN_NAME || 'Administrator',

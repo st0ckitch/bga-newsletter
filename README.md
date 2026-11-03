@@ -60,7 +60,12 @@ Whole School · Primary · Secondary · Sixth Form · Co-Curricular. Each has an
 SLT member responsible for checking its stories (assigned under **Users**).
 
 Everyone gets their own login. Accounts are created under **Users** (or with
-`npm run create-user`).
+`npm run create-user`). The staff list can also live on the host: put it in
+the `STAFF_ACCOUNTS` variable, one person per line in the Users-page import
+format (`Name,email,role`), and on start everyone new to the list appears under
+**Users** waiting for their invitation - press **Send invitations** there. It is
+kept on the host because this repository is public; each address is added
+once, so someone deleted in the app is not brought back.
 
 ## Staff guide
 
