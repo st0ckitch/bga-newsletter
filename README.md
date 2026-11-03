@@ -38,6 +38,7 @@ The issue passes along a chain, and each step is enforced by the tool:
 | **marketing** | Lays the issue out: include/exclude stories, template sections, the live editor, and creating the Mailchimp draft. |
 | **principal** | The weekly message & quote, plus the **final proof-read and approval** before the issue is sent. |
 | **admin** | Full access, for IT. |
+| **master admin** | The admin account named by `ADMIN_EMAIL`. Nobody else can change its role or password or delete it, and only it can grant or remove admin access. Its password comes from `ADMIN_PASSWORD` and is restored on every restart, so change it on the host, not in the app. |
 
 `primary` / `secondary` are the original teacher roles - existing accounts keep
 working and behave exactly like **staff**.

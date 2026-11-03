@@ -149,7 +149,7 @@
           <% if (locals.isSiteAdmin) { %>
           <td><% if (u.id !== currentUser.id && !['admin','principal'].includes(u.role)) { %><input type="checkbox" name="ids" value="<%= u.id %>" form="bulk-delete-form" aria-label="select <%= u.name %>"><% } %></td>
           <% } %>
-          <td><%= u.name %>
+          <td><%= u.name %><% if (u.master) { %> <span class="tag tag-master">master admin</span><% } %>
             <% if (u.invited) { %>
               <br><span class="tag tag-pending">✉ <%= u.invite_sent_at ? 'invited ' + fmtWhen(u.invite_sent_at) + ' - waiting' : 'no invite emailed yet' %></span>
             <% } else { %>
@@ -174,6 +174,10 @@
           </td>
           <td><%= u.email %></td>
           <td>
+            <% if (u.master || u.locked) { %>
+            <span class="muted"><%= roleLabels[u.role] || u.role %></span>
+            <br><span class="muted" style="font-size:12px"><%= u.master ? 'Always an admin.' : 'Only the master admin can change admin accounts.' %></span>
+            <% } else { %>
             <form method="post" action="/users/<%= u.id %>/role" class="inline-form">
               <input type="hidden" name="_csrf" value="<%= csrf %>">
               <select name="role" class="slot-select">
@@ -190,6 +194,7 @@
               <button class="btn btn-ghost btn-sm">Set</button>
             </form>
             <span class="muted"><%= roleLabels[u.role] || u.role %></span>
+            <% } %>
             <form method="post" action="/users/<%= u.id %>/word-limit" class="inline-form" style="margin-top:4px">
               <input type="hidden" name="_csrf" value="<%= csrf %>">
               <input type="hidden" name="unlimited" value="<%= u.no_word_limit ? '0' : '1' %>">
@@ -198,11 +203,17 @@
             </form>
           </td>
           <td>
+            <% if (u.master) { %>
+            <span class="muted" style="font-size:12px">Set on the server (ADMIN_PASSWORD)</span>
+            <% } else if (u.locked && u.id !== currentUser.id) { %>
+            <span class="muted" style="font-size:12px">Master admin only</span>
+            <% } else { %>
             <form method="post" action="/users/<%= u.id %>/password" class="inline-form">
               <input type="hidden" name="_csrf" value="<%= csrf %>">
               <input type="password" name="password" placeholder="new password (8+)" minlength="8" required>
               <button class="btn btn-ghost btn-sm">Set</button>
             </form>
+            <% } %>
           </td>
           <td class="row-actions">
             <% if (locals.isSiteAdmin && u.invited) { %>
@@ -211,7 +222,7 @@
               <button class="btn btn-ghost btn-sm"><%= u.invite_sent_at ? 'Re-send invite' : 'Send invite' %></button>
             </form>
             <% } %>
-            <% if (u.id !== currentUser.id) { %>
+            <% if (u.id !== currentUser.id && !u.master && !u.locked) { %>
             <form method="post" action="/users/<%= u.id %>/delete" data-confirm="Delete this account?">
               <input type="hidden" name="_csrf" value="<%= csrf %>">
               <button class="btn btn-danger btn-sm">Delete</button>
@@ -225,6 +236,11 @@
 </div>
 <div class="card card-narrow">
   <h2>Change my password</h2>
+  <% if (locals.viewerIsMaster) { %>
+  <p class="muted">You are the <strong>master admin</strong>. Your password comes from the server&#39;s
+  <code>ADMIN_PASSWORD</code> setting and is restored from it on every restart - change it there (Railway →
+  Variables) so the change sticks.</p>
+  <% } %>
   <form method="post" action="/account/password">
     <input type="hidden" name="_csrf" value="<%= csrf %>">
     <div class="field-row">

@@ -6,6 +6,9 @@
 //   marketing                lay the issue out and create the Mailchimp draft
 //   principal                final proof-read, then approves it for sending
 //   admin                    everything, plus accounts and configuration
+//   master admin             the one admin named by ADMIN_EMAIL: nobody else
+//                            can change, lock or remove it, and only it can
+//                            grant or take away admin access
 //
 // "primary" and "secondary" are the original teacher roles; existing
 // accounts keep working and behave exactly like staff.
@@ -65,6 +68,32 @@ function roleLabel(role) {
   return ROLE_LABELS[role] || role;
 }
 
+// The master admin is the account named by ADMIN_EMAIL - the one the server
+// recreates from the host's variables on every start, so it can never be
+// locked out.
+function isMasterAdmin(user) {
+  const master = (require('./config').admin.email || '').trim().toLowerCase();
+  return Boolean(user && master && String(user.email || '').toLowerCase() === master);
+}
+
+// Why `actor` may not make this change, or null when they may. `target` is
+// the account being changed (null when creating one) and `newRole` the role
+// being given (if any). The master admin's account is off limits to everyone
+// else and always stays an admin; admin access itself is granted and removed
+// by the master admin only.
+function adminChangeBlocked(actor, target, newRole) {
+  if (target && isMasterAdmin(target)) {
+    if (!isMasterAdmin(actor)) return 'The master admin account can only be changed by the master admin.';
+    if (newRole && newRole !== 'admin') return 'The master admin always stays an admin.';
+    return null;
+  }
+  if (isMasterAdmin(actor)) return null;
+  if ((target && target.role === 'admin') || newRole === 'admin') {
+    return 'Only the master admin can grant or remove admin access.';
+  }
+  return null;
+}
+
 module.exports = {
   ROLE_LABELS,
   ASSIGNABLE_ROLES,
@@ -83,4 +112,6 @@ module.exports = {
   isReviewer,
   canReviewSection,
   roleLabel,
+  isMasterAdmin,
+  adminChangeBlocked,
 };

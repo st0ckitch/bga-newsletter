@@ -82,6 +82,7 @@ b, strong { font-weight: 600; }
 .tag-secondary { background: #f6ecd9; color: #8a6210; }
 .tag-principal { background: #ece4fa; color: #5b3ea4; }
 .tag-admin { background: #e3e6ec; color: #394356; }
+.tag-master { background: var(--brand); color: #fff; }
 .tag-whole_school { background: #e2f0e8; color: #24684a; }
 .tag-sixth_form { background: #e7e2fa; color: #4a3aa4; }
 .tag-co_curricular { background: #fbe6dd; color: #a2512a; }

@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { requireAdmin, requireLogin, csrfOk } = require('../auth');
-const { ASSIGNABLE_ROLES, ALL_ROLES, ROLE_LABELS } = require('../roles');
+const { ASSIGNABLE_ROLES, ALL_ROLES, ROLE_LABELS, isMasterAdmin, adminChangeBlocked } = require('../roles');
 const { SECTIONS, SECTION_KEYS } = require('../sections');
 const invites = require('../invites');
 const { upload, isRealImage, removeFiles } = require('../uploads');
@@ -58,14 +58,23 @@ function usersLocals(req, extra = {}) {
               activated_at, last_login_at, headshot, no_word_limit, (password_hash = '') AS invited
        FROM users ORDER BY role, name`
     )
-    .all();
+    .all()
+    .map((u) => ({
+      ...u,
+      master: isMasterAdmin(u),
+      // Role, password and delete controls only show where the viewer may use them.
+      locked: Boolean(adminChangeBlocked(req.user, u)),
+    }));
+  const viewerIsMaster = isMasterAdmin(req.user);
   return {
     users,
+    viewerIsMaster,
     fmtWhen,
     created: false,
     roleLabels: ROLE_LABELS,
     sections: SECTIONS,
-    assignableRoles: ASSIGNABLE_ROLES,
+    // Only the master admin hands out admin access.
+    assignableRoles: viewerIsMaster ? ASSIGNABLE_ROLES : ASSIGNABLE_ROLES.filter((r) => r !== 'admin'),
     sectionKeys: SECTION_KEYS,
     isSiteAdmin: req.user.role === 'admin',
     pendingInvites: invites.pendingInvitees().length,
@@ -111,6 +120,11 @@ router.post('/users/import', requireSiteAdmin, (req, res) => {
     seen.add(email);
     if (!ALL_ROLES.includes(role)) role = 'staff';
     if (!SECTION_KEYS.includes(section)) section = '';
+    const blocked = adminChangeBlocked(req.user, null, role);
+    if (blocked) {
+      report.invalid.push(`${line.slice(0, 120)} (${blocked})`);
+      continue;
+    }
     if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) {
       report.existing.push(email);
       continue;
@@ -175,6 +189,11 @@ router.post('/users/set-roles', requireSiteAdmin, (req, res) => {
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
     if (!user) {
       report.missing.push(email);
+      continue;
+    }
+    const blocked = adminChangeBlocked(req.user, user, role);
+    if (blocked) {
+      report.invalid.push(`${email} (${blocked})`);
       continue;
     }
     const managers = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role IN ('admin','principal')").get().c;
@@ -353,6 +372,8 @@ router.post('/users', requireAdmin, (req, res) => {
   if (!values.name) errors.push('Name is required.');
   if (!ALL_ROLES.includes(values.role)) errors.push('Invalid role.');
   if (password.length < 8) errors.push('Password must be at least 8 characters.');
+  const blocked = ALL_ROLES.includes(values.role) && adminChangeBlocked(req.user, null, values.role);
+  if (blocked) errors.push(blocked);
   if (values.email && db.prepare('SELECT 1 FROM users WHERE email = ?').get(values.email)) {
     errors.push('A user with this email already exists.');
   }
@@ -375,6 +396,8 @@ router.post('/users/:id/role', requireAdmin, (req, res) => {
   if (!user) return res.status(404).render('error', { message: 'User not found.' });
   const role = req.body.role;
   if (!ALL_ROLES.includes(role)) return res.status(400).render('error', { message: 'Invalid role.' });
+  const blocked = adminChangeBlocked(req.user, user, role);
+  if (blocked) return res.status(403).render('error', { message: blocked });
   const managers = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role IN ('admin','principal')").get().c;
   if (['admin', 'principal'].includes(user.role) && !['admin', 'principal'].includes(role) && managers <= 1) {
     return res.status(400).render('error', { message: 'Cannot remove the last admin/principal account.' });
@@ -390,6 +413,8 @@ router.post('/users/:id/role', requireAdmin, (req, res) => {
 router.post('/users/:id/password', requireAdmin, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).render('error', { message: 'User not found.' });
+  const blocked = user.id !== req.user.id && adminChangeBlocked(req.user, user);
+  if (blocked) return res.status(403).render('error', { message: blocked });
   const password = req.body.password || '';
   if (password.length < 8) {
     return res.status(400).render('error', { message: 'Password must be at least 8 characters.' });
@@ -406,6 +431,11 @@ router.post('/users/:id/delete', requireAdmin, (req, res) => {
   const admins = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role IN ('admin','principal')").get().c;
   const target = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!target) return res.status(404).render('error', { message: 'User not found.' });
+  if (isMasterAdmin(target)) {
+    return res.status(403).render('error', { message: 'The master admin account cannot be deleted.' });
+  }
+  const blocked = adminChangeBlocked(req.user, target);
+  if (blocked) return res.status(403).render('error', { message: blocked });
   if (['admin', 'principal'].includes(target.role) && admins <= 1) {
     return res.status(400).render('error', { message: 'Cannot delete the last admin/principal account.' });
   }
