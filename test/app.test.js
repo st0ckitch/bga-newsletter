@@ -19,6 +19,7 @@ const assert = require('node:assert');
 const { seedAdmin, db, setSetting } = require('../src/db');
 const { createApp } = require('../src/app');
 const { generateIssue } = require('../src/generate');
+const { SECTIONS } = require('../src/sections');
 const { palette } = require('../src/brand');
 
 let server;
@@ -730,7 +731,7 @@ test('pasted links become hyperlinks: Google Drive without https, and in event n
 test('Foundation stories are single-column, in the right column beside Primary', async () => {
   // The area appears in the news form dropdown and maps to the right column.
   const form = await (await get('/news/new')).text();
-  assert.match(form, /<option value="foundation"[^>]*>Foundation<\/option>/);
+  assert.match(form, new RegExp(`<option value="foundation"[^>]*>${SECTIONS.foundation}</option>`));
   assert.match(form, /data-slots="W,D,E,F,G,H,I,X,Y"/, 'every content section is choosable');
   // ...a Foundation story lands at the top of the right column by default...
   await post('/news', { title: 'Foundation Sandpit News', body: 'Little ones had fun.', section: 'foundation' });
@@ -1185,11 +1186,12 @@ async function makeUser(name, email, role, section) {
   return loginAs(email, 'workflow-pass-1');
 }
 
-test('staff can write for any of the five areas; stories start unchecked', async () => {
+test('staff can write for any of the areas; stories start unchecked', async () => {
   const teacher = await makeUser('Caradoc Teacher', 'caradoc@test.local', 'staff');
   const form = await (await teacher.get('/news/new')).text();
-  for (const area of ['Whole School', 'Primary', 'Secondary', 'Sixth Form', 'Co-Curricular']) {
-    assert.ok(form.includes(area), `area ${area} offered to staff`);
+  assert.strictEqual(Object.keys(SECTIONS).length, 7, "BGA's seven areas");
+  for (const [key, area] of Object.entries(SECTIONS)) {
+    assert.ok(form.includes(`value="${key}"`) && form.includes(area), `area ${area} offered to staff`);
   }
   // A teacher may write about Sixth Form even though they are not in it.
   const res = await teacher.post('/news', { title: 'Sixth Form Trip', body: 'A great day out.', section: 'sixth_form' });

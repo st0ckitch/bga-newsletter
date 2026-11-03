@@ -56,8 +56,10 @@ be sent from Mailchimp.
 
 ## Content areas
 
-Whole School · Primary · Secondary · Sixth Form · Co-Curricular. Each has an
-SLT member responsible for checking its stories (assigned under **Users**).
+BGA · ბაღი · დაწყებითი საფეხური · საშუალო საფეხური · IB DP ·
+კლასგარეშე აქტივობები · საუნივერსიტეტო მხარდაჭერის პროგრამა (names in
+`src/sections.js`). Each has an SLT member responsible for checking its
+stories (assigned under **Users**).
 
 Everyone gets their own login. Accounts are created under **Users** (or with
 `npm run create-user`). The staff list can also live on the host: put it in

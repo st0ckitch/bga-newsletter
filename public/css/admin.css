@@ -84,6 +84,8 @@ b, strong { font-weight: 600; }
 .tag-admin { background: #e3e6ec; color: #394356; }
 .tag-master { background: var(--brand); color: #fff; }
 .tag-whole_school { background: #e2f0e8; color: #24684a; }
+.tag-foundation { background: #fdf0d9; color: #8a5a10; }
+.tag-university { background: #def1f4; color: #1d6573; }
 .tag-sixth_form { background: #e7e2fa; color: #4a3aa4; }
 .tag-co_curricular { background: #fbe6dd; color: #a2512a; }
 .tag-staff { background: #e4ecfa; color: #2c56a4; }

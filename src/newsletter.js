@@ -10,6 +10,7 @@
 const { formatIssueDate } = require('./week');
 const { LEFT_SLOTS, RIGHT_SLOTS, CONTENT_SLOTS, WIDE_SLOTS, DEFAULT_SLOT, MAX_ARTICLE_WORDS } = require('./slots');
 const { palette, identity } = require('./brand');
+const { SECTIONS } = require('./sections');
 
 // The BGA palette - a deep brand colour carrying the masthead, footer and
 // header bars, a bright accent for rules and kickers, a white sheet on a cool
@@ -25,6 +26,13 @@ const INK = palette.ink;
 const MUTED = palette.muted;
 const CARD_BORDER = palette.cardBorder;
 const BAR_COLORS = palette.barColors;
+
+// Capitals for Latin labels only. Georgian has no capital letters - upper-
+// casing it produces Mtavruli, which most email clients' fonts can't show.
+function caps(text) {
+  const s = String(text || '');
+  return /[\u10A0-\u10FF\u1C90-\u1CBF\u2D00-\u2D2F]/.test(s) ? s : s.toUpperCase();
+}
 
 // Mixes a hex colour toward white - used for the soft tinted bands that have
 // to follow whatever accent the brand sheet specifies.
@@ -492,8 +500,12 @@ function renderArticle(article, barColor, slotLetter, editable) {
   )}>${escapeHtml(article.title)}</span></td>
             ${
               article.sectionLabel
-                ? `<td align="right" valign="top" style="font-family:${SANS}; font-size:11px; font-weight:700; letter-spacing:2px; color:#ffffff; opacity:0.95; padding-left:8px; white-space:nowrap;">${escapeHtml(
-                    article.sectionLabel.toUpperCase()
+                ? `<td align="right" valign="top" style="font-family:${SANS}; font-size:11px; font-weight:700; letter-spacing:2px; color:#ffffff; opacity:0.95; padding-left:8px; ${
+                    // Short labels stay on one line; long ones (the university
+                    // support programme) wrap instead of squeezing the title.
+                    article.sectionLabel.length > 18 ? 'width:38%; line-height:1.3;' : 'white-space:nowrap;'
+                  }">${escapeHtml(
+                    caps(article.sectionLabel)
                   )}</td>`
                 : ''
             }
@@ -528,7 +540,7 @@ function columnHtml(letters, articles, articleHtml, placeholders, strays = []) {
       const pos = ['top', 'middle', 'bottom'][(left ? LEFT_SLOTS : RIGHT_SLOTS).indexOf(letter)];
       html += placeholderBox(
         letter,
-        `${left ? 'Primary' : 'Secondary/Foundation'} - ${left ? 'left' : 'right'} column, ${pos}`,
+        `${left ? SECTIONS.primary : `${SECTIONS.secondary}/${SECTIONS.foundation}`} - ${left ? 'left' : 'right'} column, ${pos}`,
         'Assign an article to this section in the News list.'
       );
     }
@@ -814,20 +826,21 @@ function renderNewsletter(data) {
   const leftColumn = columnHtml(LEFT_SLOTS, articles, articleHtml, placeholders, articles);
   const rightColumn = columnHtml(RIGHT_SLOTS, articles, articleHtml, placeholders);
 
-  // Dedicated full-width sections: Whole School (W) above the two columns,
-  // Sixth Form (X) and Co-Curricular (Y) below them. An empty band collapses
+  // Dedicated full-width sections: BGA as a whole (W), then IB DP with the
+  // university support programme (X) and extracurricular activities (Y). An empty band collapses
   // entirely in drafts and shows a labelled placeholder in the preview.
   const bandHtml = (letter, label, hint) => {
     const inSlot = articles.filter((a) => (a.slot || DEFAULT_SLOT) === letter);
     if (inSlot.length) return inSlot.map((a) => articleHtml(a, letter)).join('');
     return placeholders ? placeholderBox(letter, label, hint) : '';
   };
-  // Primary/Secondary news leads; the full-width sections follow, with
-  // Whole School first among them.
+  // The column news leads; the full-width sections follow, with BGA as a
+  // whole first among them.
+  const S = SECTIONS;
   const lowerBands =
-    bandHtml('W', 'Whole School - full width', 'Whole School stories run full width here, right under the news columns.') +
-    bandHtml('X', 'Sixth Form - full width', 'Sixth Form stories run full width here, below Whole School.') +
-    bandHtml('Y', 'Co-Curricular - full width', 'Co-Curricular stories run full width here, at the bottom.');
+    bandHtml('W', `${S.whole_school} - full width`, `${S.whole_school} stories run full width here, right under the news columns.`) +
+    bandHtml('X', `${S.sixth_form} / ${S.university} - full width`, `${S.sixth_form} and ${S.university} stories run full width here, below ${S.whole_school}.`) +
+    bandHtml('Y', `${S.co_curricular} - full width`, `${S.co_curricular} stories run full width here, at the bottom.`);
   const lowerBandsRow = lowerBands
     ? `
     <tr>

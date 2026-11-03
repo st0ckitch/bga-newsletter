@@ -125,8 +125,7 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 
 // The template-section dropdown only offers the positions the chosen area
-// allows (Whole School = W, Primary = left column, Secondary = right column,
-// Sixth Form = X, Co-Curricular = Y).
+// allows (see SECTION_SLOTS in src/slots.js).
 function syncSlotChoices(sectionSelect) {
   var form = sectionSelect.form;
   var slotSelect = form && form.querySelector('select[name=slot]');

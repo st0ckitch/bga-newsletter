@@ -259,42 +259,44 @@ const SERIF = FIRAGO; // display role - weight 800
 const SANS = FIRAGO; // text role - weight 300
 
 const SECTION_LABELS = {
-  whole_school: 'Whole School',
-  foundation: 'Foundation',
-  primary: 'Primary',
-  secondary: 'Secondary',
-  sixth_form: 'Sixth Form',
-  co_curricular: 'Co-Curricular',
+  whole_school: 'BGA',
+  foundation: 'ბაღი',
+  primary: 'დაწყებითი საფეხური',
+  secondary: 'საშუალო საფეხური',
+  sixth_form: 'IB DP',
+  co_curricular: 'კლასგარეშე აქტივობები',
+  university: 'საუნივერსიტეტო მხარდაჭერის პროგრამა',
 };
+const SL = SECTION_LABELS;
 const SECTION_KEYS = Object.keys(SECTION_LABELS);
 
 const SLOT_LABELS = {
-  W: 'W - Whole School \u00b7 full width, under the header',
-  D: 'D - Primary \u00b7 left column, top',
-  E: 'E - Secondary \u00b7 right column, top',
-  F: 'F - Primary \u00b7 left column, middle',
-  G: 'G - Secondary \u00b7 right column, middle',
-  H: 'H - Primary \u00b7 left column, bottom',
-  I: 'I - Secondary \u00b7 right column, bottom',
-  V: 'V - Foundation \u00b7 full width, below the columns',
-  X: 'X - Sixth Form \u00b7 full width, below the columns',
-  Y: 'Y - Co-Curricular \u00b7 full width, at the bottom',
+  W: `W - ${SL.whole_school} \u00b7 full width, under the columns`,
+  D: `D - ${SL.primary} \u00b7 left column, top`,
+  E: `E - ${SL.secondary}/${SL.foundation} \u00b7 right column, top`,
+  F: `F - ${SL.primary} \u00b7 left column, middle`,
+  G: `G - ${SL.secondary}/${SL.foundation} \u00b7 right column, middle`,
+  H: `H - ${SL.primary} \u00b7 left column, bottom`,
+  I: `I - ${SL.secondary}/${SL.foundation} \u00b7 right column, bottom`,
+  X: `X - ${SL.sixth_form} / ${SL.university} \u00b7 full width, below the columns`,
+  Y: `Y - ${SL.co_curricular} \u00b7 full width, at the bottom`,
 };
 const CONTENT_SLOTS = ['W', 'D', 'E', 'F', 'G', 'H', 'I', 'X', 'Y'];
 const LEFT_SLOTS = ['D', 'F', 'H'];
 const RIGHT_SLOTS = ['E', 'G', 'I'];
 const WIDE_SLOTS = CONTENT_SLOTS.filter((sl) => !LEFT_SLOTS.includes(sl) && !RIGHT_SLOTS.includes(sl));
 const DEFAULT_SLOT = 'D';
-const SECTION_SLOTS = { whole_school: ['W'], foundation: RIGHT_SLOTS, primary: LEFT_SLOTS, secondary: RIGHT_SLOTS, sixth_form: ['X'], co_curricular: ['Y'] };
+const SECTION_SLOTS = { whole_school: ['W'], foundation: RIGHT_SLOTS, primary: LEFT_SLOTS, secondary: RIGHT_SLOTS, sixth_form: ['X'], university: ['X'], co_curricular: ['Y'] };
 const allowedSlots = (section) => SECTION_SLOTS[section] || CONTENT_SLOTS;
 const defaultSlot = (section) => allowedSlots(section)[0];
 function columnRule(section) {
-  if (section === 'whole_school') return 'Whole School stories live in their own full-width section (W) under the columns.';
-  if (section === 'foundation') return 'Foundation stories go in the right column (E/G/I), alongside Secondary.';
-  if (section === 'primary') return 'Primary stories always go in the left column (D/F/H).';
-  if (section === 'secondary') return 'Secondary stories always go in the right column (E/G/I).';
-  if (section === 'sixth_form') return 'Sixth Form stories live in their own full-width section (X) below the columns.';
-  if (section === 'co_curricular') return 'Co-Curricular stories live in their own full-width section (Y) at the bottom.';
+  if (section === 'whole_school') return `${SL.whole_school} stories live in their own full-width section (W) under the columns.`;
+  if (section === 'foundation') return `${SL.foundation} stories go in the right column (E/G/I), alongside ${SL.secondary}.`;
+  if (section === 'primary') return `${SL.primary} stories always go in the left column (D/F/H).`;
+  if (section === 'secondary') return `${SL.secondary} stories always go in the right column (E/G/I).`;
+  if (section === 'sixth_form') return `${SL.sixth_form} stories live in their own full-width section (X) below the columns.`;
+  if (section === 'university') return `${SL.university} stories share the full-width section X with ${SL.sixth_form}.`;
+  if (section === 'co_curricular') return `${SL.co_curricular} stories live in their own full-width section (Y) at the bottom.`;
   return null;
 }
 const MAX_ARTICLE_WORDS = 100;
@@ -474,7 +476,7 @@ function renderArticleBlock(article, barColor, slotLetter, editable) {
       <tr><td${dragBar} style="background:${barColor}; border-radius:10px 10px 0 0; padding:11px 14px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
           <td style="font-family:${SANS}; font-size:14px; font-weight:600; color:#ffffff; line-height:1.35;">${slotChip}<span${ed('title')}>${escapeHtml(article.title)}</span></td>
-          ${article.sectionLabel ? `<td align="right" valign="top" style="font-family:${SANS}; font-size:8px; font-weight:600; letter-spacing:2px; color:#ffffff; opacity:0.75; padding-left:8px; white-space:nowrap;">${escapeHtml(article.sectionLabel.toUpperCase())}</td>` : ''}
+          ${article.sectionLabel ? `<td align="right" valign="top" style="font-family:${SANS}; font-size:8px; font-weight:600; letter-spacing:2px; color:#ffffff; opacity:0.75; padding-left:8px; white-space:nowrap;">${escapeHtml(/[\u10A0-\u10FF\u1C90-\u1CBF]/.test(article.sectionLabel) ? article.sectionLabel : article.sectionLabel.toUpperCase())}</td>` : ''}
         </tr></table></td></tr>
       <tr><td style="background:#ffffff; border:1px solid ${CARD_BORDER}; border-top:none; border-radius:0 0 10px 10px; padding:14px 14px 8px 14px;"${editable && article.id ? ` data-add-photo="${article.id}"` : ''}>
         ${leadPhoto}<div class="atext"${ed('body')}>${textToHtml(article.body, INK, 13.5)}</div>${renderPhotos(article.photos, editable, wide)}</td></tr>
@@ -490,7 +492,7 @@ function slotColumnHtml(letters, articles, articleHtml, placeholders, strays = [
     } else if (placeholders) {
       const left = LEFT_SLOTS.includes(letter);
       const pos = ['top', 'middle', 'bottom'][(left ? LEFT_SLOTS : RIGHT_SLOTS).indexOf(letter)];
-      html += placeholderBox(letter, `${left ? 'Primary' : 'Secondary/Foundation'} - ${left ? 'left' : 'right'} column, ${pos}`, 'Assign an article to this section in the News list.');
+      html += placeholderBox(letter, `${left ? SL.primary : `${SL.secondary}/${SL.foundation}`} - ${left ? 'left' : 'right'} column, ${pos}`, 'Assign an article to this section in the News list.');
     }
   }
   html += strays.filter((a) => !known.has(a.slot || DEFAULT_SLOT)).map((a) => articleHtml(a, DEFAULT_SLOT)).join('');
@@ -561,9 +563,9 @@ function renderNewsletter(data) {
     return placeholders ? placeholderBox(letter, label, hint) : '';
   };
   const lowerBands =
-    bandHtml('W', 'Whole School - full width', 'Whole School stories run full width here, right under the news columns.') +
-    bandHtml('X', 'Sixth Form - full width', 'Sixth Form stories run full width here, below Whole School.') +
-    bandHtml('Y', 'Co-Curricular - full width', 'Co-Curricular stories run full width here, at the bottom.');
+    bandHtml('W', `${SL.whole_school} - full width`, `${SL.whole_school} stories run full width here, right under the news columns.`) +
+    bandHtml('X', `${SL.sixth_form} / ${SL.university} - full width`, `${SL.sixth_form} and ${SL.university} stories run full width here, below ${SL.whole_school}.`) +
+    bandHtml('Y', `${SL.co_curricular} - full width`, `${SL.co_curricular} stories run full width here, at the bottom.`);
   const lowerBandsRow = lowerBands ? `<tr><td class="wrap-pad" style="padding:0 14px 6px 14px;">${lowerBands}</td></tr>` : '';
   const quoteBlock = quote && quote.text
     ? `<tr><td class="quote-pad" style="background:${NAVY_DEEP}; padding:30px 36px 28px 36px; text-align:center;">

@@ -53,9 +53,10 @@
         <% }) %>
       </select>
     </label>
-    <p class="muted">The area picks where a story lands <strong>by default</strong> - Whole School full width under
-    the header (W), Primary left (D/F/H), Secondary/Foundation right (E/G/I), Sixth Form (X) and Co-Curricular (Y)
-    below - but you can place it in <strong>any section</strong> here, and drag sections anywhere in the live preview.</p>
+    <p class="muted">The area picks where a story lands <strong>by default</strong> - <%= sectionLabels.whole_school %> full width under
+    the columns (W), <%= sectionLabels.primary %> left (D/F/H), <%= sectionLabels.secondary %> and <%= sectionLabels.foundation %> right (E/G/I),
+    <%= sectionLabels.sixth_form %> and <%= sectionLabels.university %> (X), <%= sectionLabels.co_curricular %> (Y)
+    - but you can place it in <strong>any section</strong> here, and drag sections anywhere in the live preview.</p>
     <% } else if (item && item.slot) { %>
       <p class="muted">Template section: <strong><%= slotLabels[item.slot] || item.slot %></strong> - placement is set by the admin.</p>
     <% } %>
