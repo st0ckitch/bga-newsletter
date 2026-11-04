@@ -108,6 +108,8 @@ const MOBILE_CSS = `
     .hp-table, .hp-table tbody, .hp-table tr { display: block !important; width: 100% !important; }
     .hp-cell { display: inline-block !important; width: 48% !important; box-sizing: border-box !important; }
     .awards-table th, .awards-table td { padding: 7px 6px !important; font-size: 11px !important; }
+    .pt-table, .pt-table tbody, .pt-table tr { display: block !important; width: 100% !important; }
+    .pt-cell { display: inline-block !important; width: 48% !important; box-sizing: border-box !important; vertical-align: top !important; }
   }`;
 
 function escapeHtml(s) {
@@ -719,6 +721,109 @@ function parseDirectory(footerNote) {
   });
 }
 
+/* ---------- Circle partner offers ---------- */
+
+// The partners of Circle (circle.bga.ge), styled like the website's cards:
+// the logo, the partner's name and the offer badge in Circle's gold. A
+// different set every issue (see src/partners.js); the details of each offer
+// stay behind the members' login, which every tile and the button link to.
+const CIRCLE_GOLD = '#F2B32C';
+const CIRCLE_NAVY = '#0D1B3E';
+const PARTNER_SCHOOL = 'BGA';
+
+function partnerLogo(p) {
+  if (!p.logo) return '';
+  // At most 40px tall and 120px wide, keeping the logo's own shape.
+  let h = 40;
+  let w = p.w && p.h ? Math.round((40 * p.w) / p.h) : 0;
+  if (w > 120) {
+    h = Math.max(1, Math.round((120 * p.h) / p.w));
+    w = 120;
+  }
+  const size = w ? ` width="${w}" height="${h}"` : ' height="40"';
+  const css = w ? `width:${w}px; height:${h}px;` : 'height:40px; width:auto; max-width:120px;';
+  return `<img src="${escapeHtml(p.logo)}" alt="${escapeHtml(p.partner)}"${size} style="${css} max-width:100%; display:inline-block; vertical-align:middle; border:0;">`;
+}
+
+// Rough line count for text in a partner tile (about `perLine` characters a
+// line), so every tile of an issue can reserve room for the longest name and
+// badge and the tiles stay level - BGA's Georgian names run long.
+function tileLines(text, perLine) {
+  let lines = 1;
+  let len = 0;
+  for (const word of String(text || '').split(/\s+/).filter(Boolean)) {
+    if (len && len + 1 + word.length > perLine) {
+      lines += 1;
+      len = word.length;
+    } else {
+      len += (len ? 1 : 0) + word.length;
+    }
+  }
+  return Math.min(lines, 4);
+}
+
+function renderPartnersBlock(partners, placeholders, hidden) {
+  if (hidden) {
+    return placeholders
+      ? placeholderBox('P', 'Partner offers - hidden', 'Hidden from the newsletter - switch it back on under Settings.')
+      : '';
+  }
+  if (!partners || !partners.list || !partners.list.length) {
+    return placeholders
+      ? placeholderBox('P', 'Partner offers', 'Circle partner offers from circle.bga.ge appear here automatically.')
+      : '';
+  }
+  const site = partners.site || 'https://circle.bga.ge';
+  const host = site.replace(/^https?:\/\//, '');
+  // Fixed rows for the logo, the name and the badge keep every tile the same
+  // height, side by side or stacked.
+  const nameH = 16 * Math.max(2, ...partners.list.map((p) => tileLines(p.partner, 15))) + 4;
+  const badgeH = 16 * Math.max(1, ...partners.list.map((p) => tileLines(p.badge, 13))) + 12;
+  const tile = (p) => `
+      <td class="pt-cell" width="25%" valign="top" style="padding:5px;">
+        <a href="${escapeHtml(site)}" target="_blank" style="display:block; text-decoration:none;">
+          <div style="background:#ffffff; border:1px solid #E7E4DB; border-radius:12px; padding:14px 8px 13px 8px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+              <tr><td height="44" align="center" valign="middle" style="height:44px;">${partnerLogo(p)}</td></tr>
+              <tr><td height="${nameH}" align="center" valign="middle" style="height:${nameH}px; padding-top:4px; font-family:${SANS}; font-size:12.5px; font-weight:700; line-height:16px; color:${CIRCLE_NAVY};">${escapeHtml(
+    p.partner
+  )}</td></tr>
+              <tr><td height="${badgeH}" align="center" valign="middle" style="height:${badgeH}px; padding-top:4px;">${
+                p.badge
+                  ? `<span style="display:inline-block; max-width:100%; box-sizing:border-box; background:${CIRCLE_GOLD}; color:${CIRCLE_NAVY}; font-family:${SANS}; font-size:13px; font-weight:800; line-height:16px; padding:5px 11px; border-radius:14px;">${escapeHtml(
+                      p.badge
+                    )}</span>`
+                  : '&nbsp;'
+              }</td></tr>
+            </table>
+          </div>
+        </a>
+      </td>`;
+  let rows = '';
+  for (let i = 0; i < partners.list.length; i += 4) {
+    const four = partners.list.slice(i, i + 4);
+    rows += `<tr>${four.map(tile).join('')}${'<td class="pt-cell" width="25%" style="padding:5px;">&nbsp;</td>'.repeat(4 - four.length)}</tr>`;
+  }
+  const more = partners.total > partners.list.length ? `See all ${partners.total} offers` : 'See every offer';
+  return `
+  <div style="padding:4px 0 18px 0;">
+    ${columnHeading('Circle - member benefits', 'Partner offers')}
+    <p style="margin:2px 0 6px 0; font-family:${SANS}; font-size:13.5px; line-height:1.6; color:${INK};">Through Circle, ${PARTNER_SCHOOL} families and staff get special prices from our partners. Log in at <a href="${escapeHtml(
+      site
+    )}" target="_blank" style="color:${BRAND}; font-weight:600;">${escapeHtml(host)}</a> to see each offer and how to use it.</p>
+    <table role="presentation" class="pt-table" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      ${rows}
+    </table>
+    <table role="presentation" align="center" cellpadding="0" cellspacing="0" style="border-collapse:separate; margin:12px auto 0 auto;">
+      <tr><td style="background:${CIRCLE_GOLD}; border-radius:999px; padding:10px 22px;">
+        <a href="${escapeHtml(site)}" target="_blank" style="font-family:${SANS}; font-size:13.5px; font-weight:800; color:${CIRCLE_NAVY}; text-decoration:none;">${more} on ${escapeHtml(
+          host
+        )} &rsaquo;</a>
+      </td></tr>
+    </table>
+  </div>`;
+}
+
 function renderFooter(footerNote, newsletterName, schoolName, issueDateLabel) {
   const entries = parseDirectory(footerNote);
   const hasDirectory = entries.length > 0 && entries.some((e) => e.title);
@@ -847,6 +952,14 @@ function renderNewsletter(data) {
       <td class="wrap-pad" style="padding:0 14px 6px 14px;">${lowerBands}</td>
     </tr>`
     : '';
+  // Circle partner offers close the issue, just above the footer.
+  const partnersHtml = renderPartnersBlock(data.partners, placeholders, data.partnersHidden);
+  const partnersRow = partnersHtml
+    ? `
+    <tr>
+      <td class="wrap-pad" style="padding:0 14px 6px 14px;">${partnersHtml}</td>
+    </tr>`
+    : '';
 
   const quoteBlock =
     quote && quote.text
@@ -947,6 +1060,7 @@ ${fontFaceCss(fontBase)}
       </td>
     </tr>
     ${lowerBandsRow}
+    ${partnersRow}
 
     ${renderFooter(footerNote, newsletterName, schoolName, issueDateLabel)}
   </table>
