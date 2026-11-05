@@ -48,7 +48,9 @@ function tint(hex, amount) {
 // FiraGO (OFL) - Fira with full Georgian support. Heavy carries titles,
 // Light carries running text; email clients without webfont support fall
 // back to the system sans stack.
-const FIRAGO = "'FiraGO', 'Fira Sans', 'Segoe UI', Helvetica, Arial, sans-serif";
+// ('Fira Sans' is left out: it is the same face without Georgian, and hardly
+// ever installed - every email repeats this list a hundred times or more.)
+const FIRAGO = "'FiraGO', 'Segoe UI', Helvetica, Arial, sans-serif";
 const SERIF = FIRAGO; // display/title role - used with font-weight:800
 const SANS = FIRAGO; // text role - used with font-weight:300
 
@@ -723,8 +725,8 @@ function parseDirectory(footerNote) {
 
 // The partners of Circle (circle.bga.ge), styled like the website's cards:
 // the logo and the offer badge in Circle's gold, five to a row. A
-// different set every issue (see src/partners.js); the details of each offer
-// stay behind the members' login, which every tile and the button link to.
+// different set every issue when Settings says so (see src/partners.js); the details of each offer
+// stay behind the members' login, which the button under the grid links to.
 const CIRCLE_GOLD = '#F2B32C';
 const CIRCLE_NAVY = '#0D1B3E';
 const PARTNER_SCHOOL = 'BGA';
@@ -735,7 +737,7 @@ function partnerLogo(p) {
   // shorter as they get wider (so a long wordmark does not dwarf a crest),
   // and none is wider than 88px.
   if (!(p.w && p.h)) {
-    return `<img src="${escapeHtml(p.logo)}" alt="${escapeHtml(p.partner)}" height="24" style="height:24px; max-width:88px; vertical-align:middle; border:0;">`;
+    return `<img src="${escapeHtml(p.logo)}" alt="${escapeHtml(p.partner)}" height="24" class="pt-img" style="height:24px; max-width:88px;">`;
   }
   const ratio = p.w / p.h;
   let h = Math.min(30, Math.max(16, 30 / Math.pow(Math.max(ratio, 1), 0.35)));
@@ -746,7 +748,7 @@ function partnerLogo(p) {
   }
   w = Math.max(1, Math.round(w));
   h = Math.max(1, Math.round(h));
-  return `<img src="${escapeHtml(p.logo)}" alt="${escapeHtml(p.partner)}" width="${w}" height="${h}" style="width:${w}px; height:${h}px; max-width:100%; vertical-align:middle; border:0;">`;
+  return `<img src="${escapeHtml(p.logo)}" alt="${escapeHtml(p.partner)}" width="${w}" height="${h}" class="pt-img">`;
 }
 
 // Rough line count for text in a partner tile (about `perLine` characters a
@@ -784,14 +786,14 @@ function renderPartnersBlock(partners, placeholders, hidden) {
   // and badge heights keep every tile the same height either way.
   const PER_ROW = 5;
   const badgeH = 16 * Math.max(1, ...partners.list.map((p) => tileLines(p.badge, 10))) + 10;
-  // One line per tile, and only the styles that matter: the partner grid is
-  // the biggest part of an issue, and Gmail cuts off emails over about 102 KB.
+  // One line per tile, styled by the classes in PARTNER_CSS: the partner grid
+  // is the biggest part of an issue, and Gmail cuts off emails over about 102 KB.
   const tile = (p) =>
-    `<td class="pt-cell" width="20%" valign="top" style="padding:4px;"><a href="${escapeHtml(site)}" target="_blank" style="display:block; text-decoration:none;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff; border:1px solid #E7E4DB; border-radius:12px;"><tr><td height="34" align="center" valign="middle" style="padding:12px 6px 0 6px;">${partnerLogo(p)}</td></tr><tr><td height="${badgeH}" align="center" valign="middle" style="padding:6px 6px 10px 6px;">${
+    `<td class="pt-cell" width="20%" valign="top" style="padding:4px;"><table role="presentation" class="pt-card" width="100%" cellpadding="0" cellspacing="0"><tr><td class="pt-logo" height="34" align="center" valign="middle">${partnerLogo(p)}</td></tr><tr><td class="pt-bd" height="${badgeH}" align="center" valign="middle">${
       p.badge
-        ? `<span style="display:inline-block; background:${CIRCLE_GOLD}; color:${CIRCLE_NAVY}; font-family:${SANS}; font-size:12px; font-weight:800; line-height:16px; padding:4px 9px; border-radius:14px;">${escapeHtml(p.badge)}</span>`
+        ? `<span class="pt-badge" style="background:${CIRCLE_GOLD}; color:${CIRCLE_NAVY};">${escapeHtml(p.badge)}</span>`
         : '&nbsp;'
-    }</td></tr></table></a></td>`;
+    }</td></tr></table></td>`;
   // On phones the tiles run three to a line - two when a badge has a word
   // too long for a third of the screen (Georgian words often are), so every
   // tile stays the same size.
@@ -874,6 +876,26 @@ function renderFooter(footerNote, newsletterName, schoolName, issueDateLabel) {
 }
 
 /* ---------- The full issue ---------- */
+
+// Gmail cuts off an email whose HTML is over about 102 KB ("View entire
+// message"), so the finished issue drops what costs bytes without showing:
+// indentation, HTML comments and the spaces inside inline styles.
+function compactHtml(html) {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\n\s+/g, '\n')
+    .replace(/ style="([^"]*)"/g, (m, css) => ` style="${css.replace(/\s*([;:,])\s*/g, '$1').replace(/;$/, '')}"`);
+}
+
+// The partner tiles' look, written once for all of them: 30-odd tiles each
+// carrying these styles cost over 10 KB, and Gmail cuts off emails over about
+// 102 KB. The badge keeps its colours inline, for email apps that drop <style>.
+const PARTNER_CSS = `
+  .pt-card { background: #ffffff; border: 1px solid #E7E4DB; border-radius: 12px; }
+  .pt-logo { padding: 12px 4px 0 4px; }
+  .pt-img { max-width: 100%; vertical-align: middle; border: 0; }
+  .pt-bd { padding: 6px 4px 10px 4px; }
+  .pt-badge { display: inline-block; font-family: ${SANS}; font-size: 12px; font-weight: 800; line-height: 16px; padding: 4px 9px; border-radius: 14px; }`;
 
 function renderNewsletter(data) {
   const {
@@ -987,7 +1009,7 @@ function renderNewsletter(data) {
           )}</td></tr>`
         : '';
 
-  return `<!DOCTYPE html>
+  return compactHtml(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -998,6 +1020,7 @@ function renderNewsletter(data) {
 ${fontFaceCss(fontBase)}
 </style>
 <style>
+  ${PARTNER_CSS}
   ${MOBILE_CSS}
 </style>
 </head>
@@ -1072,7 +1095,7 @@ ${fontFaceCss(fontBase)}
     editable ? `<script src="/js/preview-editor.js"></script>` : ''
   }
 </body>
-</html>`;
+</html>`);
 }
 
 // One article rendered exactly as the newsletter will show it, at column
