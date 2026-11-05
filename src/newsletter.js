@@ -729,6 +729,9 @@ function parseDirectory(footerNote) {
 // stay behind the members' login, which the button under the grid links to.
 const CIRCLE_GOLD = '#F2B32C';
 const CIRCLE_NAVY = '#0D1B3E';
+// How many partners, as the newsletter says it: "30+" rather than an exact
+// number that changes whenever a partner joins (exact below 10).
+const partnerCount = (n) => (n >= 10 ? `${Math.floor(n / 10) * 10}+` : String(n));
 const PARTNER_SCHOOL = 'BGA';
 
 function partnerLogo(p) {
@@ -805,7 +808,7 @@ function renderPartnersBlock(partners, placeholders, hidden) {
       PER_ROW - row.length
     )}</tr>`;
   }
-  const more = partners.total > partners.list.length ? `See all ${partners.total} offers` : 'See every offer';
+  const more = partners.total > partners.list.length ? `See all ${partnerCount(partners.total)} offers` : 'See every offer';
   return `
   <div style="padding:4px 0 18px 0;">
     ${columnHeading('Circle - member benefits', 'Partner offers')}
