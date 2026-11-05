@@ -40,12 +40,18 @@ const palette = {
 // The rotating colours of the article header bars, in order.
 palette.barColors = [palette.brandDeep, palette.brand, palette.accentDeep, palette.ink];
 
-// BGA's house colours, keyed by the lower-cased house name. A house created
-// under a name listed here is coloured automatically; any other house starts
-// in the brand colour and is recoloured with the per-row colour picker on the
-// Houses page. Fill this in with the school's four houses when they are
-// confirmed, e.g. { lions: '#DD2127' }.
-palette.houseColors = {};
+// BGA's four houses, from the school's 2024 house artwork. The colours are
+// the ones the house logos are drawn on (the separate colour sheet in that
+// pack lists slightly different values). Keyed by the lower-cased house
+// name: a house created under one of these names gets its colour
+// automatically; any other starts in the brand colour. The white crests are
+// in assets/houses/, and src/house-seed.js sets the houses up on a new site.
+palette.houseColors = {
+  ilia: '#22694c',
+  rustaveli: '#f7c017',
+  'tamar mepe': '#df1e32',
+  pirosmani: '#633972',
+};
 
 const identity = {
   // Masthead wordmark and the footer lockup. Also the default for the

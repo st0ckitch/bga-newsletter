@@ -592,15 +592,10 @@ function renderMenusBlock(menus, placeholders) {
 // and "N Points" inside, two tiles per row. Leader (most points) comes
 // first. Fixed right under the events/principal top block in every issue;
 // managers keep the numbers current on the Houses page.
-function houseTileText(color) {
-  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color || '');
-  if (!m) return { name: '#ffffff', points: '#ffffff' };
-  const [r, g, b] = [m[1], m[2], m[3]].map((h) => parseInt(h, 16));
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  // The name is a darkened shade of the tile itself (dark green on green,
-  // maroon on red - as in the reference); on a dark tile it stays white.
-  const darken = `#${[r, g, b].map((v) => Math.round(v * 0.42).toString(16).padStart(2, '0')).join('')}`;
-  return { name: lum < 0.25 ? '#ffffff' : darken, points: '#ffffff' };
+function houseTileText() {
+  // As in BGA's house artwork: a white crest and a white name on the house
+  // colour, with the points in white beneath.
+  return { name: '#ffffff', points: '#ffffff' };
 }
 
 function renderHousePointsBlock(houses, placeholders, hidden) {

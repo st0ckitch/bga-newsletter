@@ -4,9 +4,11 @@ const { createApp } = require('./src/app');
 const { normalizePhoto } = require('./src/uploads');
 const scheduler = require('./src/scheduler');
 const { seedStaffAccounts } = require('./src/staff-seed');
+const { seedHouses } = require('./src/house-seed');
 
 seedAdmin();
 seedStaffAccounts();
+seedHouses();
 
 // One-time catch-up: photos uploaded before uploads were processed get
 // turned upright, downsized and stripped of metadata in the background (never
