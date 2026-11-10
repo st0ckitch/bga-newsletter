@@ -350,18 +350,19 @@ test('the email stays small: light partner tiles, no comments, compact inline st
 test('Join Circle: in Georgian and BGA colours, after the calendar and the principal message', () => {
   const partners = { site: 'https://circle.bga.ge', total: 34, list: [{ partner: 'A', badge: '-10%', logo: 'https://circle.bga.ge/a.png', w: 100, h: 100 }] };
   const html = renderNewsletter({ ...baseData, partners });
-  const join = html.indexOf('გაწევრიანდით Circle-ში ორ წუთში');
+  const join = html.indexOf('შემოუერთდით Circle-ს');
   assert.ok(join > html.indexOf('class="desk-principal"') && join > html.indexOf('Sports Day'), 'after the events and the principal message');
   assert.ok(join < html.indexOf('Tennis &lt;win&gt;'), 'before the stories');
-  assert.match(html, /სპეციალური ფასები 30\+ პარტნიორ კომპანიაში/);
+  assert.match(html, /სპეციალურ შეთავაზებებს 40-მდე პარტნიორ კომპანიაში/);
+  assert.match(html, /ეწვიეთ <a href="https:\/\/circle\.bga\.ge\/\?join=1"[^>]*>circle\.bga\.ge<\/a>-ს და მონიშნეთ თქვენი სტატუსი/);
   assert.match(html, /<a href="https:\/\/circle\.bga\.ge\/\?join=1"[^>]*>დარეგისტრირდით &rsaquo;<\/a>/);
-  assert.match(html, /<a href="https:\/\/circle\.bga\.ge\/\?login=1"[^>]*>შედით<\/a>/);
+  assert.match(html, /<a href="https:\/\/circle\.bga\.ge\/\?login=1"[^>]*>შედით სისტემაში<\/a> და ნახეთ ყველა შეთავაზება/);
   // The school's own colours: the deep brand colour behind, the accent on the button.
   assert.match(html, new RegExp(`background:${palette.brandDeep}; ?border-top:3px solid ${palette.accent}`));
   assert.match(html, new RegExp(`background:${palette.accent}; ?border-radius:999px`));
   // Without the feed yet it still invites people, to circle.bga.ge.
   assert.match(renderNewsletter(baseData), /href="https:\/\/circle\.bga\.ge\/\?join=1"/);
   // Switched off in Settings: gone from the email, a labelled box in the preview.
-  assert.ok(!renderNewsletter({ ...baseData, joinCircleHidden: true }).includes('გაწევრიანდით'));
+  assert.ok(!renderNewsletter({ ...baseData, joinCircleHidden: true }).includes('შემოუერთდით'));
   assert.match(renderNewsletter({ ...baseData, joinCircleHidden: true, placeholders: true }), /Join Circle - hidden/);
 });

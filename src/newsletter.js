@@ -845,14 +845,11 @@ function renderJoinCircleBlock(partners, placeholders, hidden) {
   const join = `${site}/?join=1`;
   const link = (href, label) =>
     `<a href="${escapeHtml(href)}" target="_blank" style="color:#ffffff; font-weight:700; text-decoration:underline;">${label}</a>`;
-  const offers =
-    partners && partners.total
-      ? `სპეციალური ფასები ${partnerCount(partners.total)} პარტნიორ კომპანიაში მთელ თბილისში`
-      : 'სპეციალური ფასები პარტნიორ კომპანიებში მთელ თბილისში';
+  // The wording is BGA's own (10 November 2026).
   const steps = [
-    `გადადით ${link(join, escapeHtml(host))}-ზე და აირჩიეთ, ხართ მშობელი / მეურვე თუ თანამშრომელი.`,
-    'შეიყვანეთ ელფოსტა. მშობლებმა და მეურვეებმა ასევე უნდა მიუთითონ შვილის პირადი ნომერი; თანამშრომლები სკოლის ელფოსტას იყენებენ.',
-    'გახსენით ბმული, რომელსაც ელფოსტით გამოგიგზავნით, და შექმენით პაროლი.',
+    `ეწვიეთ ${link(join, escapeHtml(host))}-ს და მონიშნეთ თქვენი სტატუსი: მშობელი / მეურვე ან თანამშრომელი.`,
+    'შეიყვანეთ თქვენი ელფოსტა (მშობლებმა და მეურვეებმა დამატებით მიუთითეთ ბავშვის პირადი ნომერი, ხოლო თანამშრომლებმა გამოიყენეთ სკოლის ელფოსტა).',
+    'გადადით მეილზე მიღებულ ბმულზე და შექმენით პაროლი.',
   ];
   const stepRows = steps
     .map(
@@ -866,14 +863,13 @@ function renderJoinCircleBlock(partners, placeholders, hidden) {
   <div style="padding:2px 0 18px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; background:${BRAND_DEEP}; border-top:3px solid ${ACCENT}; border-radius:14px;">
       <tr><td style="padding:22px 24px 20px 24px;">
-        <p style="margin:0 0 6px 0; font-family:${SANS}; font-size:11px; font-weight:700; letter-spacing:1px; color:${ACCENT_SOFT};">CIRCLE &bull; BGA-ს საზოგადოება</p>
-        <h2 style="margin:0 0 10px 0; font-family:${SERIF}; font-size:24px; font-weight:800; line-height:1.25; color:#ffffff;">გაწევრიანდით Circle-ში ორ წუთში</h2>
-        <p style="margin:0 0 16px 0; font-family:${SANS}; font-size:14.5px; line-height:1.6; color:${ACCENT_SOFT};">Circle აერთიანებს BGA-ს მშობლებს, სასკოლო საზოგადოებას და ბავშვებს: ${offers}, სათემო ღონისძიებები და მასტერკლასები იმ თემებზე, რომლებსაც თქვენ აირჩევთ ხმის მიცემით.</p>
+        <h2 style="margin:0 0 10px 0; font-family:${SERIF}; font-size:24px; font-weight:800; line-height:1.25; color:#ffffff;">შემოუერთდით Circle-ს</h2>
+        <p style="margin:0 0 16px 0; font-family:${SANS}; font-size:14.5px; line-height:1.6; color:${ACCENT_SOFT};">Circle-ი BGA-ს მშობლებს, მოსწავლეებსა და გუნდს აერთიანებს. პროგრამა გთავაზობთ საერთო შეხვედრებსა და მასტერკლასებს თქვენ მიერ შერჩეულ თემებზე და სპეციალურ შეთავაზებებს 40-მდე პარტნიორ კომპანიაში.</p>
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${stepRows}</table>
         <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate; margin:10px 0 0 0;">
           <tr><td style="background:${ACCENT}; border-radius:999px; padding:11px 24px;"><a href="${escapeHtml(join)}" target="_blank" style="font-family:${SANS}; font-size:14px; font-weight:800; color:#ffffff; text-decoration:none;">დარეგისტრირდით &rsaquo;</a></td></tr>
         </table>
-        <p style="margin:12px 0 0 0; font-family:${SANS}; font-size:12.5px; line-height:1.5; color:${ACCENT_SOFT};">უკვე წევრი ხართ? ${link(`${site}/?login=1`, 'შედით')} და ნახეთ ყველა შეთავაზება.</p>
+        <p style="margin:12px 0 0 0; font-family:${SANS}; font-size:12.5px; line-height:1.5; color:${ACCENT_SOFT};">უკვე დარეგისტრირებული ხართ? ${link(`${site}/?login=1`, 'შედით სისტემაში')} და ნახეთ ყველა შეთავაზება.</p>
       </td></tr>
     </table>
   </div>`;
