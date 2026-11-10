@@ -724,11 +724,13 @@ function parseDirectory(footerNote) {
 /* ---------- Circle partner offers ---------- */
 
 // The partners of Circle (circle.bga.ge), styled like the website's cards:
-// the logo and the offer badge in Circle's gold, five to a row. A
+// the logo and the offer badge, five to a row, in BGA blue (the brand book
+// has no gold). A
 // different set every issue when Settings says so (see src/partners.js); the details of each offer
 // stay behind the members' login, which the button under the grid links to.
-const CIRCLE_GOLD = '#F2B32C';
-const CIRCLE_NAVY = '#0D1B3E';
+// Offer badges: the light tint of BGA blue with dark blue text.
+const BADGE_BG = ACCENT;
+const BADGE_TEXT = BRAND_DEEP;
 // How many partners, as the newsletter says it: "30+" rather than an exact
 // number that changes whenever a partner joins (exact below 10).
 const partnerCount = (n) => (n >= 10 ? `${Math.floor(n / 10) * 10}+` : String(n));
@@ -794,7 +796,7 @@ function renderPartnersBlock(partners, placeholders, hidden) {
   const tile = (p) =>
     `<td class="pt-cell" width="20%" valign="top" style="padding:4px;"><table role="presentation" class="pt-card" width="100%" cellpadding="0" cellspacing="0"><tr><td class="pt-logo" height="34" align="center" valign="middle">${partnerLogo(p)}</td></tr><tr><td class="pt-bd" height="${badgeH}" align="center" valign="middle">${
       p.badge
-        ? `<span class="pt-badge" style="background:${CIRCLE_GOLD}; color:${CIRCLE_NAVY};">${escapeHtml(p.badge)}</span>`
+        ? `<span class="pt-badge" style="background:${BADGE_BG}; color:${BADGE_TEXT};">${escapeHtml(p.badge)}</span>`
         : '&nbsp;'
     }</td></tr></table></td>`;
   // On phones the tiles run three to a line - two when a badge has a word
@@ -819,8 +821,8 @@ function renderPartnersBlock(partners, placeholders, hidden) {
       <tbody class="pt-body">${rows}</tbody>
     </table>
     <table role="presentation" align="center" cellpadding="0" cellspacing="0" style="border-collapse:separate; margin:12px auto 0 auto;">
-      <tr><td style="background:${CIRCLE_GOLD}; border-radius:999px; padding:10px 22px;">
-        <a href="${escapeHtml(site)}" target="_blank" style="font-family:${SANS}; font-size:13.5px; font-weight:800; color:${CIRCLE_NAVY}; text-decoration:none;">${more} on ${escapeHtml(
+      <tr><td style="background:${BRAND}; border-radius:999px; padding:10px 22px;">
+        <a href="${escapeHtml(site)}" target="_blank" style="font-family:${SANS}; font-size:13.5px; font-weight:800; color:#ffffff; text-decoration:none;">${more} on ${escapeHtml(
           host
         )} &rsaquo;</a>
       </td></tr>
@@ -833,7 +835,7 @@ function renderPartnersBlock(partners, placeholders, hidden) {
 // Right after the calendar and the principal's message: an invitation, in
 // Georgian, to join Circle - the BGA community programme - with a button
 // straight to the registration form on circle.bga.ge (?join=1 opens it on
-// Register). In the school's colours, so it reads as part of the newsletter.
+// Register). On BGA blue with a white button - the brand book's two colours.
 function renderJoinCircleBlock(partners, placeholders, hidden) {
   if (hidden) {
     return placeholders
@@ -854,20 +856,20 @@ function renderJoinCircleBlock(partners, placeholders, hidden) {
   const stepRows = steps
     .map(
       (s, i) =>
-        `<tr><td width="32" valign="top" style="padding:0 0 8px 0;"><span style="display:inline-block; width:22px; height:22px; border-radius:11px; background:${ACCENT}; color:#ffffff; font-family:${SANS}; font-size:12px; font-weight:800; line-height:22px; text-align:center;">${
+        `<tr><td width="32" valign="top" style="padding:0 0 8px 0;"><span style="display:inline-block; width:22px; height:22px; border-radius:11px; background:${ACCENT}; color:${BRAND_DEEP}; font-family:${SANS}; font-size:12px; font-weight:800; line-height:22px; text-align:center;">${
           i + 1
         }</span></td><td valign="top" style="padding:2px 0 8px 0; font-family:${SANS}; font-size:14px; line-height:1.55; color:#ffffff;">${s}</td></tr>`
     )
     .join('');
   return `
   <div style="padding:2px 0 18px 0;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; background:${BRAND_DEEP}; border-top:3px solid ${ACCENT}; border-radius:14px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; background:${BRAND}; border-top:3px solid ${ACCENT}; border-radius:14px;">
       <tr><td style="padding:22px 24px 20px 24px;">
         <h2 style="margin:0 0 10px 0; font-family:${SERIF}; font-size:24px; font-weight:800; line-height:1.25; color:#ffffff;">შემოუერთდით Circle-ს</h2>
         <p style="margin:0 0 16px 0; font-family:${SANS}; font-size:14.5px; line-height:1.6; color:${ACCENT_SOFT};">Circle-ი BGA-ს მშობლებს, მოსწავლეებსა და გუნდს აერთიანებს. პროგრამა გთავაზობთ საერთო შეხვედრებსა და მასტერკლასებს თქვენ მიერ შერჩეულ თემებზე და სპეციალურ შეთავაზებებს 40-მდე პარტნიორ კომპანიაში.</p>
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${stepRows}</table>
         <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate; margin:10px 0 0 0;">
-          <tr><td style="background:${ACCENT}; border-radius:999px; padding:11px 24px;"><a href="${escapeHtml(join)}" target="_blank" style="font-family:${SANS}; font-size:14px; font-weight:800; color:#ffffff; text-decoration:none;">დარეგისტრირდით &rsaquo;</a></td></tr>
+          <tr><td style="background:#ffffff; border-radius:999px; padding:11px 24px;"><a href="${escapeHtml(join)}" target="_blank" style="font-family:${SANS}; font-size:14px; font-weight:800; color:${BRAND}; text-decoration:none;">დარეგისტრირდით &rsaquo;</a></td></tr>
         </table>
         <p style="margin:12px 0 0 0; font-family:${SANS}; font-size:12.5px; line-height:1.5; color:${ACCENT_SOFT};">უკვე დარეგისტრირებული ხართ? ${link(`${site}/?login=1`, 'შედით სისტემაში')} და ნახეთ ყველა შეთავაზება.</p>
       </td></tr>

@@ -84,13 +84,15 @@ the platform once its address is set in `index.html` and `404.html`.
 Everything that carries the school's name or colours reads from
 **`src/brand.js`**: the newsletter email, the reminder emails, the admin
 panel and the demo masthead. It holds two things - the identity (newsletter
-name, school name, reply-to address) and a palette of one deep brand colour
-plus one bright accent.
+name, school name, reply-to address) and the palette.
 
-> **The four brand hexes in `src/brand.js` are still placeholders.** Replace
-> them with the values from the BGA brand sheet, mirror them in the `:root`
-> block of `public/css/admin.css`, then run `npm test` (it fails if the two
-> drift apart) and `npm run masthead` to redraw the demo banner.
+The palette follows the BGA brand book: **BGA blue `#005198`** (CMYK
+100/76/10/1, Pantone P 104-16U) and white. `brand` is that blue; the
+deeper shade and the two lighter tones beside it in `src/brand.js` are
+strengths of the same blue for the dark bands, rules and small text. To
+change them, edit `src/brand.js`, mirror the four hexes in the `:root` block
+of `public/css/admin.css`, then run `npm test` (it fails if the copies drift
+apart) and `npm run masthead` to redraw the demo banner.
 
 The newsletter name and school name in `src/brand.js` are only the
 *defaults*: once the app is running, staff change them under **Settings**

@@ -78,7 +78,7 @@ test('every palette value is a six-digit hex colour', () => {
       assert.match(value, /^#[0-9a-f]{6}$/i, `a colour in palette.${group} is not a hex colour`);
     }
   }
-  assert.strictEqual(palette.barColors.length, 4, 'four rotating article header colours');
+  assert.strictEqual(palette.barColors.length, 3, 'three rotating article header colours, all strengths of BGA blue');
 });
 
 test('no BIST branding is left in the shipped identity', () => {

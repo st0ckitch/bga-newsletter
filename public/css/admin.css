@@ -7,10 +7,10 @@
    `npm test` checks that the two files agree, so change them in both (or
    change brand.js and let the failing test tell you). */
 :root {
-  --brand: #12306b;
-  --brand-deep: #0a1c45;
-  --accent: #d8232a;
-  --accent-deep: #a3151b;
+  --brand: #005198;
+  --brand-deep: #003767;
+  --accent: #8ac4f2;
+  --accent-deep: #1f6cb3;
   --page: #f5f6f8;
   --ink: #3a4258;
   --muted: #6b7280;

@@ -344,7 +344,7 @@ test('the email stays small: light partner tiles, no comments, compact inline st
   assert.ok(!/ style="[^"]*[;:] /.test(html), 'no spaces inside inline styles');
   assert.ok(!/\n[ \t]+</.test(html), 'no indentation');
   assert.match(html, /\.pt-badge \{ display: inline-block;/, 'the tile styles are written once, in <style>');
-  assert.match(html, /<span class="pt-badge" style="background:#F2B32C;color:#0D1B3E">-20%<\/span>/, 'badges keep their colours inline');
+  assert.ok(html.includes(`<span class="pt-badge" style="background:${palette.accent};color:${palette.brandDeep}">-20%</span>`), 'badges keep their colours inline');
 });
 
 test('Join Circle: in Georgian and BGA colours, after the calendar and the principal message', () => {
@@ -357,9 +357,9 @@ test('Join Circle: in Georgian and BGA colours, after the calendar and the princ
   assert.match(html, /ეწვიეთ <a href="https:\/\/circle\.bga\.ge\/\?join=1"[^>]*>circle\.bga\.ge<\/a>-ს და მონიშნეთ თქვენი სტატუსი/);
   assert.match(html, /<a href="https:\/\/circle\.bga\.ge\/\?join=1"[^>]*>დარეგისტრირდით &rsaquo;<\/a>/);
   assert.match(html, /<a href="https:\/\/circle\.bga\.ge\/\?login=1"[^>]*>შედით სისტემაში<\/a> და ნახეთ ყველა შეთავაზება/);
-  // The school's own colours: the deep brand colour behind, the accent on the button.
-  assert.match(html, new RegExp(`background:${palette.brandDeep}; ?border-top:3px solid ${palette.accent}`));
-  assert.match(html, new RegExp(`background:${palette.accent}; ?border-radius:999px`));
+  // The brand book's two colours: BGA blue behind, a white button with blue text.
+  assert.match(html, new RegExp(`background:${palette.brand}; ?border-top:3px solid ${palette.accent}`));
+  assert.match(html, new RegExp(`background:#ffffff; ?border-radius:999px; ?padding:11px 24px;? ?"><a href="https://circle\\.bga\\.ge/\\?join=1"[^>]*color:${palette.brand}`));
   // Without the feed yet it still invites people, to circle.bga.ge.
   assert.match(renderNewsletter(baseData), /href="https:\/\/circle\.bga\.ge\/\?join=1"/);
   // Switched off in Settings: gone from the email, a labelled box in the preview.

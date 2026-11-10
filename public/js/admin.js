@@ -288,7 +288,7 @@ function shrinkImage(file, maxSide, quality) {
       if (i >= files.length) {
         btn.disabled = false;
         btn.textContent = 'Import photos';
-        log('Done: ' + matched + ' matched and saved, ' + skipped + ' skipped (of ' + files.length + ').', getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() || '#12306b');
+        log('Done: ' + matched + ' matched and saved, ' + skipped + ' skipped (of ' + files.length + ').', getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() || '#005198');
         return;
       }
       var file = files[i++];
@@ -471,7 +471,7 @@ function shrinkImage(file, maxSide, quality) {
       if (i >= files.length) {
         btn.disabled = false;
         btn.textContent = 'Restore photos';
-        log('Done: ' + restored + ' restored, ' + skipped + ' skipped (of ' + files.length + ').', getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() || '#12306b');
+        log('Done: ' + restored + ' restored, ' + skipped + ' skipped (of ' + files.length + ').', getComputedStyle(document.documentElement).getPropertyValue('--brand').trim() || '#005198');
         return;
       }
       var file = files[i++];

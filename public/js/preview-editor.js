@@ -126,7 +126,7 @@
      document, which has no access to the admin stylesheet, so it carries its
      own copy of the palette - keep these four in sync with src/brand.js
      (`npm test` checks that they match). */
-  var C = { brand: '#12306b', brandDeep: '#0a1c45', accent: '#d8232a', accentDeep: '#a3151b', ink: '#3a4258' };
+  var C = { brand: '#005198', brandDeep: '#003767', accent: '#8ac4f2', accentDeep: '#1f6cb3', ink: '#3a4258' };
   function rgb(hex) {
     return [1, 3, 5].map(function (i) { return parseInt(hex.substr(i, 2), 16); }).join(',');
   }

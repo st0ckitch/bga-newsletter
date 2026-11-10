@@ -4,24 +4,25 @@
 // email, the reminder emails, the admin panel and the demo masthead - reads
 // from here, so re-skinning the whole tool is a single edit.
 //
-// >>> PROVISIONAL PALETTE <<<
-// The four hexes under `palette` below are placeholders chosen to sit in the
-// same roles as the original design (one deep brand colour, one bright
-// accent). Replace them with the values from the BGA brand sheet; nothing
-// else in the codebase needs to change. `public/css/admin.css` carries the
-// same four values as CSS variables and is checked against this file by
-// `npm test`, so drift cannot go unnoticed. After changing them, run
+// The palette follows the BGA brand book, which names two colours: BLUE
+// #005198 (CMYK 100/76/10/1, Pantone P 104-16U) and WHITE #ffffff. `brand` is
+// that blue exactly; the other three brand roles are a darker shade and two
+// lighter tones of the same blue, because the layout needs more than one
+// strength of it (there is no second brand colour). `public/css/admin.css`
+// carries the same four values as CSS variables and is checked against this
+// file by `npm test`, so drift cannot go unnoticed. After changing them, run
 // `npm run masthead` to redraw the demo masthead in the new colours.
 
 const palette = {
-  // Deep brand colour: masthead, footer, article header bars, primary buttons.
-  brand: '#12306b',
-  // Darkest shade: the top bar, the quote banner, the masthead background.
-  brandDeep: '#0a1c45',
-  // Bright accent: rules, dividers, kickers, the hairline above the footer.
-  accent: '#d8232a',
-  // Accent dark enough to read as text on white.
-  accentDeep: '#a3151b',
+  // BGA blue from the brand book: footer, article header bars, primary
+  // buttons, the Join Circle invitation.
+  brand: '#005198',
+  // A darker shade of BGA blue: the top bar, the quote banner, the masthead.
+  brandDeep: '#003767',
+  // A light tint of BGA blue: rules, dividers, and small text on the blues.
+  accent: '#8ac4f2',
+  // A mid tone of BGA blue, dark enough to read as text on white.
+  accentDeep: '#1f6cb3',
 
   // Supporting neutrals - these carry the layout, not the brand.
   accentSoft: '#dfe4ee', // muted light text on the brand colour
@@ -37,8 +38,9 @@ const palette = {
   ok: '#2e7d52',
 };
 
-// The rotating colours of the article header bars, in order.
-palette.barColors = [palette.brandDeep, palette.brand, palette.accentDeep, palette.ink];
+// The rotating colours of the article header bars, in order: the three
+// strengths of BGA blue that carry white text.
+palette.barColors = [palette.brandDeep, palette.brand, palette.accentDeep];
 
 // BGA's four houses, from the school's 2024 house artwork. The colours are
 // the ones the house logos are drawn on (the separate colour sheet in that
