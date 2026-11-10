@@ -346,3 +346,22 @@ test('the email stays small: light partner tiles, no comments, compact inline st
   assert.match(html, /\.pt-badge \{ display: inline-block;/, 'the tile styles are written once, in <style>');
   assert.match(html, /<span class="pt-badge" style="background:#F2B32C;color:#0D1B3E">-20%<\/span>/, 'badges keep their colours inline');
 });
+
+test('Join Circle: in Georgian and BGA colours, after the calendar and the principal message', () => {
+  const partners = { site: 'https://circle.bga.ge', total: 34, list: [{ partner: 'A', badge: '-10%', logo: 'https://circle.bga.ge/a.png', w: 100, h: 100 }] };
+  const html = renderNewsletter({ ...baseData, partners });
+  const join = html.indexOf('გაწევრიანდით Circle-ში ორ წუთში');
+  assert.ok(join > html.indexOf('class="desk-principal"') && join > html.indexOf('Sports Day'), 'after the events and the principal message');
+  assert.ok(join < html.indexOf('Tennis &lt;win&gt;'), 'before the stories');
+  assert.match(html, /სპეციალური ფასები 30\+ პარტნიორ კომპანიაში/);
+  assert.match(html, /<a href="https:\/\/circle\.bga\.ge\/\?join=1"[^>]*>დარეგისტრირდით &rsaquo;<\/a>/);
+  assert.match(html, /<a href="https:\/\/circle\.bga\.ge\/\?login=1"[^>]*>შედით<\/a>/);
+  // The school's own colours: the deep brand colour behind, the accent on the button.
+  assert.match(html, new RegExp(`background:${palette.brandDeep}; ?border-top:3px solid ${palette.accent}`));
+  assert.match(html, new RegExp(`background:${palette.accent}; ?border-radius:999px`));
+  // Without the feed yet it still invites people, to circle.bga.ge.
+  assert.match(renderNewsletter(baseData), /href="https:\/\/circle\.bga\.ge\/\?join=1"/);
+  // Switched off in Settings: gone from the email, a labelled box in the preview.
+  assert.ok(!renderNewsletter({ ...baseData, joinCircleHidden: true }).includes('გაწევრიანდით'));
+  assert.match(renderNewsletter({ ...baseData, joinCircleHidden: true, placeholders: true }), /Join Circle - hidden/);
+});

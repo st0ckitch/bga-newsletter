@@ -828,6 +828,57 @@ function renderPartnersBlock(partners, placeholders, hidden) {
   </div>`;
 }
 
+/* ---------- Join Circle: the invitation to register ---------- */
+
+// Right after the calendar and the principal's message: an invitation, in
+// Georgian, to join Circle - the BGA community programme - with a button
+// straight to the registration form on circle.bga.ge (?join=1 opens it on
+// Register). In the school's colours, so it reads as part of the newsletter.
+function renderJoinCircleBlock(partners, placeholders, hidden) {
+  if (hidden) {
+    return placeholders
+      ? placeholderBox('J', 'Join Circle - hidden', 'Hidden from the newsletter - switch it back on under Settings.')
+      : '';
+  }
+  const site = ((partners && partners.site) || 'https://circle.bga.ge').replace(/\/+$/, '');
+  const host = site.replace(/^https?:\/\//, '');
+  const join = `${site}/?join=1`;
+  const link = (href, label) =>
+    `<a href="${escapeHtml(href)}" target="_blank" style="color:#ffffff; font-weight:700; text-decoration:underline;">${label}</a>`;
+  const offers =
+    partners && partners.total
+      ? `სპეციალური ფასები ${partnerCount(partners.total)} პარტნიორ კომპანიაში მთელ თბილისში`
+      : 'სპეციალური ფასები პარტნიორ კომპანიებში მთელ თბილისში';
+  const steps = [
+    `გადადით ${link(join, escapeHtml(host))}-ზე და აირჩიეთ, ხართ მშობელი / მეურვე თუ თანამშრომელი.`,
+    'შეიყვანეთ ელფოსტა. მშობლებმა და მეურვეებმა ასევე უნდა მიუთითონ შვილის პირადი ნომერი; თანამშრომლები სკოლის ელფოსტას იყენებენ.',
+    'გახსენით ბმული, რომელსაც ელფოსტით გამოგიგზავნით, და შექმენით პაროლი.',
+  ];
+  const stepRows = steps
+    .map(
+      (s, i) =>
+        `<tr><td width="32" valign="top" style="padding:0 0 8px 0;"><span style="display:inline-block; width:22px; height:22px; border-radius:11px; background:${ACCENT}; color:#ffffff; font-family:${SANS}; font-size:12px; font-weight:800; line-height:22px; text-align:center;">${
+          i + 1
+        }</span></td><td valign="top" style="padding:2px 0 8px 0; font-family:${SANS}; font-size:14px; line-height:1.55; color:#ffffff;">${s}</td></tr>`
+    )
+    .join('');
+  return `
+  <div style="padding:2px 0 18px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; background:${BRAND_DEEP}; border-top:3px solid ${ACCENT}; border-radius:14px;">
+      <tr><td style="padding:22px 24px 20px 24px;">
+        <p style="margin:0 0 6px 0; font-family:${SANS}; font-size:11px; font-weight:700; letter-spacing:1px; color:${ACCENT_SOFT};">CIRCLE &bull; BGA-ს საზოგადოება</p>
+        <h2 style="margin:0 0 10px 0; font-family:${SERIF}; font-size:24px; font-weight:800; line-height:1.25; color:#ffffff;">გაწევრიანდით Circle-ში ორ წუთში</h2>
+        <p style="margin:0 0 16px 0; font-family:${SANS}; font-size:14.5px; line-height:1.6; color:${ACCENT_SOFT};">Circle აერთიანებს BGA-ს მშობლებს, სასკოლო საზოგადოებას და ბავშვებს: ${offers}, სათემო ღონისძიებები და მასტერკლასები იმ თემებზე, რომლებსაც თქვენ აირჩევთ ხმის მიცემით.</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${stepRows}</table>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate; margin:10px 0 0 0;">
+          <tr><td style="background:${ACCENT}; border-radius:999px; padding:11px 24px;"><a href="${escapeHtml(join)}" target="_blank" style="font-family:${SANS}; font-size:14px; font-weight:800; color:#ffffff; text-decoration:none;">დარეგისტრირდით &rsaquo;</a></td></tr>
+        </table>
+        <p style="margin:12px 0 0 0; font-family:${SANS}; font-size:12.5px; line-height:1.5; color:${ACCENT_SOFT};">უკვე წევრი ხართ? ${link(`${site}/?login=1`, 'შედით')} და ნახეთ ყველა შეთავაზება.</p>
+      </td></tr>
+    </table>
+  </div>`;
+}
+
 function renderFooter(footerNote, newsletterName, schoolName, issueDateLabel) {
   const entries = parseDirectory(footerNote);
   const hasDirectory = entries.length > 0 && entries.some((e) => e.title);
@@ -1072,6 +1123,7 @@ ${fontFaceCss(fontBase)}
             <td class="col" width="${COL_W}" valign="top">${principalHtml ? `<div class="desk-principal">${principalHtml}</div>` : '&nbsp;'}</td>
           </tr>
         </table>
+        ${renderJoinCircleBlock(data.partners, placeholders, data.joinCircleHidden)}
         ${renderHousePointsBlock(data.houses, placeholders, data.housePointsHidden)}
         ${renderMenusBlock(data.menus, placeholders)}
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">

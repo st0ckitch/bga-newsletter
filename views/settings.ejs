@@ -128,6 +128,7 @@
       <input type="text" name="partners_per_issue" inputmode="numeric" pattern="[0-9]*" value="<%= settings.partners_per_issue %>" style="width:70px; display:inline-block; margin:0 0 0 6px;">
     </label>
     <label class="muted" style="margin:0; font-weight:600;"><input type="checkbox" name="partners_visible" value="1" <%= settings.partners_visible !== '0' ? 'checked' : '' %>> show in the newsletter</label>
+    <label class="muted" style="margin:0; font-weight:600;"><input type="checkbox" name="circle_join_visible" value="1" <%= settings.circle_join_visible !== '0' ? 'checked' : '' %>> &ldquo;Join Circle&rdquo; invitation at the top</label>
     <button class="btn btn-primary btn-sm">Save</button>
   </form>
   <p class="muted" style="margin-top:8px;">0 (the default) shows every partner in every issue; a number shows that many, a different set every week. After each generation the report says whether the email is small enough for Gmail, which cuts off longer emails (&ldquo;View entire message&rdquo;).</p>
