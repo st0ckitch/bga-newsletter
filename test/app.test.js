@@ -591,6 +591,25 @@ test('demo clear removes only demo rows and their files', async () => {
   }
 });
 
+test("the principal's own words over demo text survive the demo clear; a carried-over message says so", async () => {
+  const { generationWeekStart } = require('../src/appweek');
+  const week = generationWeekStart();
+  db.prepare(
+    `INSERT INTO principal_messages (week_start, body, is_demo, carried_from) VALUES (?, 'Demo text', 1, '2000-01-03')
+     ON CONFLICT(week_start) DO UPDATE SET body = 'Demo text', is_demo = 1, carried_from = '2000-01-03'`
+  ).run(week);
+  const page = await (await get('/principal-message')).text();
+  assert.match(page, /written for the week of Monday, 3 January 2000\. That newsletter was never sent/);
+
+  const res = await post('/principal-message', { body: 'Dear Parents, the real message.' });
+  assert.strictEqual(res.status, 302);
+  await post('/demo-data/clear', {});
+  const row = db.prepare('SELECT body, is_demo, carried_from FROM principal_messages WHERE week_start = ?').get(week);
+  assert.strictEqual(row && row.body, 'Dear Parents, the real message.');
+  assert.strictEqual(row.carried_from, null, 'the note goes once the message is saved');
+  assert.doesNotMatch(await (await get('/principal-message')).text(), /That newsletter was never sent/);
+});
+
 test('masthead background: settings upload renders in the preview; a real one survives demo fill/clear', async () => {
   const { getSetting } = require('../src/db');
   const png = Buffer.from(

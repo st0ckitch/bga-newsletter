@@ -10,6 +10,7 @@ const mailchimp = require('./mailchimp');
 const { renderNewsletter } = require('./newsletter');
 const { uploadSize } = require('./imagesize');
 const { refreshPartners, partnersForWeek } = require('./partners');
+const { carryOverPrincipalMessage, campaignWentOut } = require('./carry-over');
 const { generationWeekStart, generationDay } = require('./appweek');
 
 const { SECTIONS: SECTION_LABELS } = require('./sections');
@@ -207,6 +208,10 @@ async function generateIssue({ weekStart, trigger = 'manual' } = {}) {
   // The latest Circle partner offers go into the draft; if the Circle API
   // cannot be reached, the last copy read is used instead.
   const feed = await refreshPartners();
+  // Last week's message, if that issue was never sent (src/carry-over.js).
+  await carryOverPrincipalMessage(weekStart).catch((err) =>
+    console.error("[generate] Could not check last week's issue:", err.message)
+  );
   const data = collectWeekData(weekStart);
   if (feed.error !== 'not configured') {
     step(
@@ -388,6 +393,11 @@ async function generateIssue({ weekStart, trigger = 'manual' } = {}) {
           campaignId = existing.campaign_id;
           campaignWebUrl = existing.campaign_web_url;
         } catch (err) {
+          // Usually because it was sent already: note that before the new
+          // draft takes its place, so this week still counts as sent.
+          if (await campaignWentOut(existing.campaign_id).catch(() => false)) {
+            db.prepare("UPDATE issues SET sent_at = COALESCE(sent_at, datetime('now')) WHERE id = ?").run(existing.id);
+          }
           warnings.push(`Existing draft could not be updated (${err.message}); a new draft was created instead.`);
         }
       }

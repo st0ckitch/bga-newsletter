@@ -9,6 +9,7 @@ const reminders = require('./reminders');
 const { generateIssue } = require('./generate');
 const { refreshPartners } = require('./partners');
 const { tidyStorage } = require('./storage');
+const { carryOverPrincipalMessage } = require('./carry-over');
 
 let jobs = [];
 
@@ -47,6 +48,8 @@ function start() {
   // Shares identical copies, removes unused files, scales down oversized
   // pictures - so the storage volume never quietly fills up.
   schedule('43 3 * * *', tz, 'storage-tidy', () => tidyStorage());
+  // Just after midnight, so a new week opens with an unsent message in it.
+  schedule('7 0 * * *', tz, 'principal-carry-over', () => carryOverPrincipalMessage());
   schedule(getSetting('friday_generate_cron'), tz, 'generate-draft', async () => {
     const result = await generateIssue({ trigger: 'cron' });
     // The editor reviews the assembled draft (curate articles, then send

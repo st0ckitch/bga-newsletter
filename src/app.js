@@ -66,6 +66,9 @@ function createApp() {
     if (req.user) require('./baseurl').rememberBaseUrl(req);
     next();
   });
+  // A principal's message written for an issue that never went out moves
+  // into the current issue (src/carry-over.js) before any page reads it.
+  app.use(require('./carry-over').carryOverMiddleware);
   app.use(csrfProtection);
 
   app.use(require('./routes/auth'));

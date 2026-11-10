@@ -223,6 +223,8 @@ ensureColumn('principal_messages', 'photo_mailchimp_url', 'photo_mailchimp_url T
 ensureColumn('events', 'is_demo', 'is_demo INTEGER NOT NULL DEFAULT 0');
 ensureColumn('news', 'is_demo', 'is_demo INTEGER NOT NULL DEFAULT 0');
 ensureColumn('principal_messages', 'is_demo', 'is_demo INTEGER NOT NULL DEFAULT 0');
+// Set when an unsent week's message is brought into a later issue (src/carry-over.js).
+ensureColumn('principal_messages', 'carried_from', 'carried_from TEXT');
 
 // SLT sign-off on stories, and the principal's approval of the whole issue.
 ensureColumn('users', 'section', 'section TEXT');
@@ -262,6 +264,8 @@ ensureColumn('news', 'reviewed_at', 'reviewed_at TEXT');
 ensureColumn('news', 'review_note', 'review_note TEXT');
 ensureColumn('issues', 'approved_by', 'approved_by INTEGER');
 ensureColumn('issues', 'approved_at', 'approved_at TEXT');
+// Set when a sent campaign is replaced by a new draft on regeneration.
+ensureColumn('issues', 'sent_at', 'sent_at TEXT');
 if (ensureColumn('news', 'review_status', "review_status TEXT NOT NULL DEFAULT 'pending'")) {
   // Stories that existed before reviewing was introduced were already live -
   // treat them as checked rather than hiding them from the next issue.

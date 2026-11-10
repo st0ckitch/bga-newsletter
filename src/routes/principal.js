@@ -26,6 +26,7 @@ function pageLocals(req, weekStart, extra = {}) {
     deadlineHuman: `${formatHuman(generationDay(weekStart))} at ${generationTimeLabel()}`,
     saved: req.query.saved === '1',
     savedHeadshots: savedHeadshots(),
+    formatHuman,
     errors: [],
     ...extra,
   };
@@ -88,7 +89,8 @@ function savePrincipalMessage(req, res) {
     `INSERT INTO principal_messages (week_start, body, quote, quote_author, created_by)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(week_start) DO UPDATE SET body = excluded.body, quote = excluded.quote,
-       quote_author = excluded.quote_author, created_by = excluded.created_by, updated_at = datetime('now')`
+       quote_author = excluded.quote_author, created_by = excluded.created_by, updated_at = datetime('now'),
+       is_demo = 0, carried_from = NULL`
   ).run(weekStart, body, quote, quote_author, req.user.id);
   // Portrait priority: an uploaded file wins; otherwise a saved staff
   // headshot picked from the dropdown (the message gets its own copy).

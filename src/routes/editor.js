@@ -62,13 +62,13 @@ const TEXT_TARGETS = {
     fields: { body: { required: true } },
     load: (week) => (isValidDateStr(week) ? db.prepare('SELECT * FROM principal_messages WHERE week_start = ?').get(week) : null),
     save: (week, field, value) =>
-      db.prepare(`UPDATE principal_messages SET ${field} = ?, updated_at = datetime('now') WHERE week_start = ?`).run(value, week),
+      db.prepare(`UPDATE principal_messages SET ${field} = ?, is_demo = 0, updated_at = datetime('now') WHERE week_start = ?`).run(value, week),
   },
   quote: {
     fields: { text: { required: true, max: 300, column: 'quote' }, author: { required: false, max: 100, column: 'quote_author' } },
     load: (week) => (isValidDateStr(week) ? db.prepare('SELECT * FROM principal_messages WHERE week_start = ?').get(week) : null),
     save: (week, field, value, column) =>
-      db.prepare(`UPDATE principal_messages SET ${column} = ?, updated_at = datetime('now') WHERE week_start = ?`).run(value, week),
+      db.prepare(`UPDATE principal_messages SET ${column} = ?, is_demo = 0, updated_at = datetime('now') WHERE week_start = ?`).run(value, week),
   },
 };
 

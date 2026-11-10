@@ -31,6 +31,9 @@ const app = createApp();
 app.listen(config.port, () => {
   console.log(`[server] Newsletter admin panel running on ${config.appBaseUrl} (port ${config.port})`);
   scheduler.start();
+  require('./src/carry-over')
+    .ensureCarriedOver()
+    .catch((err) => console.error('[carry-over] Startup check failed:', err.message));
   // Then the storage tidy-up (src/storage.js), which logs where the space goes.
   normalizeOldPhotos()
     .catch((err) => console.error('[uploads] Photo catch-up failed:', err.message))
