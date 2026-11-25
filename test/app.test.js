@@ -1571,7 +1571,7 @@ test('school menus: managers curate titled links; the newsletter shows them as b
   assert.match(preview, /სასკოლო მენიუ/);
   assert.match(preview, /href="https:\/\/bga\.ge\/menus\/foundation\.pdf"/);
   assert.match(preview, /Year 6-13 &rarr;/);
-  assert.ok(preview.indexOf('სასკოლო მენიუ') > preview.indexOf('მოახლოებული ღონისძიებები'), 'menus sit below the top block');
+  assert.ok(preview.indexOf('სასკოლო მენიუ') > preview.indexOf('ღონისძიებების კალენდარი'), 'menus sit below the top block');
 
   // editing a link in place
   const id = db.prepare("SELECT id FROM menus WHERE title = 'Foundation'").get().id;
@@ -1758,7 +1758,7 @@ test('house points strip (fixed under the principal) and the primary awards tabl
   assert.ok(preview.includes(`background:${tigers}`), 'tile painted in the house colour');
   assert.match(preview, /205 ქულა/);
   // The strip is fixed below the events/principal top block...
-  assert.ok(preview.indexOf('სახლების ქულები') > preview.indexOf('მოახლოებული ღონისძიებები'), 'sits under the top block');
+  assert.ok(preview.indexOf('სახლების ქულები') > preview.indexOf('ღონისძიებების კალენდარი'), 'sits under the top block');
   // ...and the leader (most points) comes first with the gold treatment.
   assert.ok(preview.indexOf('Dragon') < preview.indexOf('Phoenix'), 'leader first');
   assert.match(preview, /ლიდერი/);
@@ -2164,7 +2164,7 @@ test('circle partner offers come from the Circle feed into the preview and the e
     assert.notDeepStrictEqual(thisIssue, nextIssue, 'a different set every week');
     for (const name of thisIssue) assert.ok(email.includes(`alt="${name}"`));
     // It sits at the bottom, just above the footer.
-    assert.ok(email.indexOf('პარტნიორების შეთავაზებები') > email.indexOf('მოახლოებული ღონისძიებები'));
+    assert.ok(email.indexOf('პარტნიორების შეთავაზებები') > email.indexOf('ღონისძიებების კალენდარი'));
     assert.match(await (await get('/settings')).text(), /10 partners/);
 
     // If Circle cannot be reached, the last copy keeps the section going.

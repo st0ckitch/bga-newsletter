@@ -35,7 +35,7 @@ test('renderNewsletter includes all template sections', () => {
   assert.match(html, /font-weight:300/);
   assert.match(html, /ბიულეტენს გამოსცემს/);
   assert.match(html, /Dream big/);
-  assert.match(html, /მოახლოებული ღონისძიებები/);
+  assert.match(html, /ღონისძიებების კალენდარი/);
   assert.match(html, /Sports Day/);
   assert.match(html, /დირექტორის მიმართვა/);
   assert.match(html, /Welcome back\./);
@@ -46,7 +46,7 @@ test('renderNewsletter includes all template sections', () => {
 
 test('layout order: calendar and principal fixed on top, then the article columns', () => {
   const html = renderNewsletter(baseData);
-  const events = html.indexOf('მოახლოებული ღონისძიებები');
+  const events = html.indexOf('ღონისძიებების კალენდარი');
   // The desktop copy of the principal block (the mobile-only copy legitimately
   // renders earlier in the source, before the fixed top block).
   const principal = html.indexOf('დირექტორის მიმართვა', html.indexOf('class="desk-principal"'));
@@ -136,7 +136,7 @@ test('empty data renders without placeholders by default', () => {
     articles: [],
   });
   assert.match(html, /BGA NEWSLETTER/);
-  assert.ok(!/მოახლოებული ღონისძიებები/.test(html));
+  assert.ok(!/ღონისძიებების კალენდარი/.test(html));
   assert.ok(!/SECTION [A-I]/.test(html));
 });
 
@@ -267,7 +267,7 @@ test('masthead background image renders email-safe with the brand-colour fallbac
 test('mobile: principal message stacks first, before events; desktop keeps it in the right column', () => {
   const html = renderNewsletter(baseData);
   const mob = html.indexOf('class="mob-principal"');
-  const events = html.indexOf('მოახლოებული ღონისძიებები');
+  const events = html.indexOf('ღონისძიებების კალენდარი');
   const desk = html.indexOf('class="desk-principal"');
   assert.ok(mob !== -1 && desk !== -1, 'both principal copies present');
   assert.ok(mob < events, 'mobile principal copy comes before the events block in source order');

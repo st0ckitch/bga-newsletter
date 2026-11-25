@@ -58,7 +58,7 @@ const TEXT = {
 
   // Upcoming events
   saveTheDate: 'მონიშნეთ კალენდარში',
-  upcomingEvents: 'მოახლოებული ღონისძიებები',
+  upcomingEvents: 'ღონისძიებების კალენდარი',
   calendar: 'კალენდარი',
 
   // Principal's message
