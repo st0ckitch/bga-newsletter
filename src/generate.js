@@ -11,6 +11,7 @@ const { renderNewsletter } = require('./newsletter');
 const { uploadSize } = require('./imagesize');
 const { refreshPartners, partnersForWeek } = require('./partners');
 const { carryOverPrincipalMessage, campaignWentOut } = require('./carry-over');
+const { TEXT } = require('./newsletter-text');
 const { generationWeekStart, generationDay } = require('./appweek');
 
 const { SECTIONS: SECTION_LABELS } = require('./sections');
@@ -366,7 +367,7 @@ async function generateIssue({ weekStart, trigger = 'manual' } = {}) {
   // chosen either way, so the report can nudge even without Mailchimp.
   const subject = data.emailSubject
     ? `${getSetting('newsletter_name')} - ${data.emailSubject}`
-    : `${getSetting('newsletter_name')} - ${getSetting('school_name')} Weekly Newsletter`;
+    : `${getSetting('newsletter_name')} - ${TEXT.defaultSubject}`;
   step(
     Boolean(data.emailSubject),
     'Catchy email subject set',

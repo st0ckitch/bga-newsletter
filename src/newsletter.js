@@ -7,7 +7,7 @@
 //   D/F/H and E/G/I - admin-assigned article slots in the left and right
 //   columns, each article under a colored header bar with its photos
 //   Footer - staff directory grid + branding.
-const { formatIssueDate } = require('./week');
+const { TEXT, monthName, weekdayShort, issueDate: issueDateText, issueMonth, untilDate } = require('./newsletter-text');
 const { LEFT_SLOTS, RIGHT_SLOTS, CONTENT_SLOTS, WIDE_SLOTS, DEFAULT_SLOT, MAX_ARTICLE_WORDS } = require('./slots');
 const { palette, identity } = require('./brand');
 const { SECTIONS } = require('./sections');
@@ -27,11 +27,19 @@ const MUTED = palette.muted;
 const CARD_BORDER = palette.cardBorder;
 const BAR_COLORS = palette.barColors;
 
+const GEORGIAN_RE = /[\u10A0-\u10FF\u1C90-\u1CBF\u2D00-\u2D2F]/;
+
 // Capitals for Latin labels only. Georgian has no capital letters - upper-
 // casing it produces Mtavruli, which most email clients' fonts can't show.
 function caps(text) {
   const s = String(text || '');
-  return /[\u10A0-\u10FF\u1C90-\u1CBF\u2D00-\u2D2F]/.test(s) ? s : s.toUpperCase();
+  return GEORGIAN_RE.test(s) ? s : s.toUpperCase();
+}
+
+// Letter-spacing for a small label: the wide tracking that suits Latin
+// capitals pulls Georgian words apart, so Georgian stays close to normal.
+function track(text, px) {
+  return `letter-spacing:${GEORGIAN_RE.test(String(text || '')) ? 0.5 : px}px;`;
 }
 
 // Mixes a hex colour toward white - used for the soft tinted bands that have
@@ -146,12 +154,12 @@ function linkLabel(href) {
   } catch {
     return href;
   }
-  if (host === 'forms.gle' || (host === 'docs.google.com' && pathname.startsWith('/forms'))) return 'Open the form';
-  if (host === 'docs.google.com' && pathname.startsWith('/document')) return 'Open in Google Docs';
-  if (host === 'docs.google.com' && pathname.startsWith('/spreadsheets')) return 'Open in Google Sheets';
-  if (host === 'docs.google.com' && pathname.startsWith('/presentation')) return 'Open in Google Slides';
-  if (host === 'drive.google.com' || host === 'docs.google.com') return 'Open in Google Drive';
-  if (host === 'youtube.com' || host === 'youtu.be') return 'Watch on YouTube';
+  if (host === 'forms.gle' || (host === 'docs.google.com' && pathname.startsWith('/forms'))) return TEXT.openForm;
+  if (host === 'docs.google.com' && pathname.startsWith('/document')) return TEXT.openGoogleDocs;
+  if (host === 'docs.google.com' && pathname.startsWith('/spreadsheets')) return TEXT.openGoogleSheets;
+  if (host === 'docs.google.com' && pathname.startsWith('/presentation')) return TEXT.openGoogleSlides;
+  if (host === 'drive.google.com' || host === 'docs.google.com') return TEXT.openGoogleDrive;
+  if (host === 'youtube.com' || host === 'youtu.be') return TEXT.watchYouTube;
   return host;
 }
 
@@ -246,16 +254,13 @@ function textToHtml(text, color = INK, size = 15, leadHtml = '') {
 }
 
 function monthLabel(dateStr) {
-  const [y, m] = dateStr.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
+  return monthName(dateStr);
 }
 
 function dayParts(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
   return {
-    num: d,
-    weekday: dt.toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' }).toUpperCase(),
+    num: Number(dateStr.split('-')[2]),
+    weekday: weekdayShort(dateStr),
   };
 }
 
@@ -270,8 +275,8 @@ function columnHeading(kicker, title, rightHtml = '') {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
     <tr>
       <td valign="bottom">
-        <p style="margin:0 0 4px 0; font-family:${SANS}; font-size:10px; font-weight:600; letter-spacing:3px; color:${ACCENT_DEEP};">${escapeHtml(
-    kicker.toUpperCase()
+        <p style="margin:0 0 4px 0; font-family:${SANS}; font-size:10px; font-weight:600; ${track(kicker, 3)} color:${ACCENT_DEEP};">${escapeHtml(
+    caps(kicker)
   )}</p>
         <h2 style="margin:0 0 8px 0; font-family:${SERIF}; font-size:22px; font-weight:800; line-height:1.2; color:${BRAND};">${escapeHtml(
     title
@@ -321,7 +326,7 @@ function renderEventRow(ev, editable) {
       range = `<span style="font-size:10px; color:#dfe4ee;">-${end.num}</span>`;
     } else {
       // Range crosses a month boundary - "31-2" would mislead, spell it out.
-      metaHtml.push(escapeHtml(`Until ${end.num} ${monthLabel(ev.end_date)}`));
+      metaHtml.push(escapeHtml(untilDate(ev.end_date)));
     }
   }
   if (ev.location) metaHtml.push(`<span${ed('location')}>${linkify(bindBareLinks(escapeHtml(ev.location)))}</span>`);
@@ -330,7 +335,7 @@ function renderEventRow(ev, editable) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; background:#ffffff; border:1px solid ${CARD_BORDER}; border-radius:10px;">
     <tr>
       <td width="54" align="center" valign="middle" style="background:${BRAND}; border-radius:10px 0 0 10px; padding:10px 4px;">
-        <p style="margin:0; font-family:${SANS}; font-size:9px; font-weight:600; letter-spacing:2px; color:${ACCENT};">${day.weekday}</p>
+        <p style="margin:0; font-family:${SANS}; font-size:9px; font-weight:600; ${track(day.weekday, 2)} color:${ACCENT};">${day.weekday}</p>
         <p style="margin:1px 0 0 0; font-family:${SERIF}; font-size:20px; font-weight:800; line-height:1; color:#ffffff;">${day.num}${range}</p>
       </td>
       <td valign="middle" style="padding:8px 12px;">
@@ -354,7 +359,7 @@ function renderEventsBlock(events, calendarUrl, editable) {
   const calendarChip = calendarUrl
     ? `<a href="${escapeHtml(
         calendarUrl
-      )}" style="display:inline-block; border:1px solid ${ACCENT}; border-radius:14px; padding:4px 12px; font-family:${SANS}; font-size:10px; font-weight:600; letter-spacing:2px; color:${ACCENT_DEEP}; text-decoration:none;">CALENDAR</a>`
+      )}" style="display:inline-block; border:1px solid ${ACCENT}; border-radius:14px; padding:4px 12px; font-family:${SANS}; font-size:10px; font-weight:600; ${track(TEXT.calendar, 2)} color:${ACCENT_DEEP}; text-decoration:none;">${escapeHtml(TEXT.calendar)}</a>`
     : '';
   let rows = '';
   let lastMonth = '';
@@ -365,8 +370,8 @@ function renderEventsBlock(events, calendarUrl, editable) {
       rows += `
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:10px 0 8px 0;"><tr>
         <td width="7" height="7" style="background:${ACCENT}; border-radius:7px; font-size:0; line-height:0;">&nbsp;</td>
-        <td style="font-family:${SANS}; font-size:10px; font-weight:600; letter-spacing:3px; color:${BRAND}; padding:0 0 0 8px;">${escapeHtml(
-        m.toUpperCase()
+        <td style="font-family:${SANS}; font-size:10px; font-weight:600; ${track(m, 3)} color:${BRAND}; padding:0 0 0 8px;">${escapeHtml(
+        caps(m)
       )}</td>
       </tr></table>`;
     }
@@ -374,7 +379,7 @@ function renderEventsBlock(events, calendarUrl, editable) {
   }
   return `
   <div style="padding:0 0 18px 0;">
-    ${columnHeading('Save the date', 'Upcoming Events', calendarChip)}
+    ${columnHeading(TEXT.saveTheDate, TEXT.upcomingEvents, calendarChip)}
     <div style="padding-top:8px;">${rows}</div>
   </div>`;
 }
@@ -390,7 +395,7 @@ function renderPrincipalBlock(principalMessage, editable) {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">
       <tr>
         <td style="background:${BRAND}; border-radius:10px 10px 0 0; padding:11px 14px;">
-          <p style="margin:0; font-family:${SANS}; font-size:13px; font-weight:600; letter-spacing:2px; color:#ffffff;">PRINCIPAL&#39;S MESSAGE</p>
+          <p style="margin:0; font-family:${SANS}; font-size:13px; font-weight:600; ${track(TEXT.principalsMessage, 2)} color:#ffffff;">${escapeHtml(TEXT.principalsMessage)}</p>
         </td>
       </tr>
       <tr><td height="3" style="background:${ACCENT}; font-size:0; line-height:0;">&nbsp;</td></tr>
@@ -402,7 +407,7 @@ function renderPrincipalBlock(principalMessage, editable) {
             const portrait = principalMessage.photoUrl
               ? `<img src="${escapeHtml(principalMessage.photoUrl)}"${
                   canEdit ? ` data-photo="principal:${week}"` : ''
-                } alt="Principal" width="96" align="right" style="width:96px; height:auto; border-radius:8px; margin:0 0 8px 12px;">`
+                } alt="${escapeHtml(TEXT.principalAlt)}" width="96" align="right" style="width:96px; height:auto; border-radius:8px; margin:0 0 8px 12px;">`
               : '';
             return canEdit
               ? `${portrait}<div class="atext" data-edit="principal:${week}:body">${textToHtml(principalMessage.body, INK, 13.5)}</div>`
@@ -450,7 +455,7 @@ function renderPhotos(photos, editable, wide) {
     const cells = items.map(
       (p, i) => `
         <td width="${widths[i]}" align="center" valign="top" style="width:${pct(exact[i])}; padding:0;">
-          <img src="${escapeHtml(photoUrl(p))}"${photoAttr(p, editable)} alt="Newsletter photo" class="${
+          <img src="${escapeHtml(photoUrl(p))}"${photoAttr(p, editable)} alt="${escapeHtml(TEXT.photoAlt)}" class="${
             one ? 'ph-one' : 'ph-two'
           }" width="${widths[i]}" height="${Math.round(h)}" style="display:block; width:100%; height:auto; margin:0 auto; border-radius:${
             one ? 9 : 8
@@ -485,7 +490,7 @@ function renderArticle(article, barColor, slotLetter, editable) {
   // Optional head-of-grade portrait: small, top-right beside the text - the
   // same treatment as the principal's photo. Content photos stay below.
   const leadPhoto = article.leadPhotoUrl
-    ? `<img src="${escapeHtml(article.leadPhotoUrl)}" alt="Section head" width="96" align="right" style="width:96px; height:auto; border-radius:8px; margin:0 0 8px 12px;">`
+    ? `<img src="${escapeHtml(article.leadPhotoUrl)}" alt="${escapeHtml(TEXT.sectionHeadAlt)}" width="96" align="right" style="width:96px; height:auto; border-radius:8px; margin:0 0 8px 12px;">`
     : '';
   const slotChip = slotLetter
     ? `<span style="display:inline-block; background:rgba(255,255,255,0.28); border-radius:4px; padding:1px 7px; font-family:${SANS}; font-size:9px; font-weight:600; letter-spacing:1px; margin-right:8px;">${escapeHtml(
@@ -507,7 +512,7 @@ function renderArticle(article, barColor, slotLetter, editable) {
   )}>${escapeHtml(article.title)}</span></td>
             ${
               article.sectionLabel
-                ? `<td align="right" valign="top" style="font-family:${SANS}; font-size:11px; font-weight:700; letter-spacing:2px; color:#ffffff; opacity:0.95; padding-left:8px; ${
+                ? `<td align="right" valign="top" style="font-family:${SANS}; font-size:11px; font-weight:700; ${track(article.sectionLabel, 2)} color:#ffffff; opacity:0.95; padding-left:8px; ${
                     // Short labels stay on one line; long ones (the university
                     // support programme) wrap instead of squeezing the title.
                     article.sectionLabel.length > 18 ? 'width:38%; line-height:1.3;' : 'white-space:nowrap;'
@@ -579,8 +584,8 @@ function renderMenusBlock(menus, placeholders) {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">
       <tr>
         <td style="background:${BRAND}; border-radius:10px; padding:14px 16px 16px 16px;">
-          <p style="margin:0; font-family:${SANS}; font-size:10px; font-weight:600; letter-spacing:3px; color:${ACCENT};">SCHOOL MENUS</p>
-          <p style="margin:6px 0 0 0; font-family:${SANS}; font-size:12.5px; color:${ACCENT_SOFT};">What&rsquo;s on the table this week - pick your year group:</p>
+          <p style="margin:0; font-family:${SANS}; font-size:10px; font-weight:600; ${track(TEXT.schoolMenus, 3)} color:${ACCENT};">${escapeHtml(TEXT.schoolMenus)}</p>
+          <p style="margin:6px 0 0 0; font-family:${SANS}; font-size:12.5px; color:${ACCENT_SOFT};">${escapeHtml(TEXT.menusIntro)}</p>
           ${buttons}
         </td>
       </tr>
@@ -627,8 +632,8 @@ function renderHousePointsBlock(houses, placeholders, hidden) {
           <p style="margin:0; font-family:${SERIF}; font-size:24px; font-weight:800; letter-spacing:4px; color:${text.name}; text-transform:uppercase;">${escapeHtml(
       h.name
     )}</p>
-          <p style="margin:10px 0 0 0; font-family:${SANS}; font-size:20px; font-weight:700; color:${text.points};">${Number(h.points) || 0} Points</p>
-          ${leader ? `<p style="margin:6px 0 0 0; font-family:${SANS}; font-size:10px; font-weight:600; letter-spacing:3px; color:${text.points};">&#9733; LEADING</p>` : ''}
+          <p style="margin:10px 0 0 0; font-family:${SANS}; font-size:20px; font-weight:700; color:${text.points};">${escapeHtml(TEXT.points(Number(h.points) || 0))}</p>
+          ${leader ? `<p style="margin:6px 0 0 0; font-family:${SANS}; font-size:10px; font-weight:600; ${track(TEXT.leading, 3)} color:${text.points};">&#9733; ${escapeHtml(TEXT.leading)}</p>` : ''}
         </div>
       </td>`;
   };
@@ -641,7 +646,7 @@ function renderHousePointsBlock(houses, placeholders, hidden) {
   }
   return `
   <div style="padding:0 0 18px 0;">
-    ${columnHeading('House spirit', 'House Points')}
+    ${columnHeading(TEXT.houseSpirit, TEXT.housePoints)}
     <table role="presentation" class="hp-table" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin-top:8px;">
       ${rows}
     </table>
@@ -687,7 +692,7 @@ function renderAwardsBlock(awards, topic, placeholders) {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
       <tr><td style="background:${REWARDS_BAND}; border-radius:8px; padding:12px 16px; border-bottom:3px solid ${ACCENT};">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-          <td style="font-family:${SANS}; font-size:19px; font-weight:800; color:#ffffff;">Primary Certificates of Recognition</td>
+          <td style="font-family:${SANS}; font-size:19px; font-weight:800; color:#ffffff;">${escapeHtml(TEXT.primaryCertificates)}</td>
           <td align="right" style="font-size:22px; line-height:1;">\u{1F3C6}</td>
         </tr></table>
       </td></tr>
@@ -701,7 +706,7 @@ function renderAwardsBlock(awards, topic, placeholders) {
     }
     <table role="presentation" class="awards-table" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; background:#ffffff;">
       ${rows}
-      <tr><td colspan="4" align="center" style="background:${REWARDS_TINT}; font-family:${SANS}; font-size:13.5px; font-weight:700; font-style:italic; color:${BRAND}; padding:11px 10px; border:1px solid ${REWARDS_BORDER};">Congratulations to all our winners! \u{1F38A}</td></tr>
+      <tr><td colspan="4" align="center" style="background:${REWARDS_TINT}; font-family:${SANS}; font-size:13.5px; font-weight:700; font-style:italic; color:${BRAND}; padding:11px 10px; border:1px solid ${REWARDS_BORDER};">${escapeHtml(TEXT.congratulations)} \u{1F38A}</td></tr>
     </table>
   </div>`;
 }
@@ -810,21 +815,23 @@ function renderPartnersBlock(partners, placeholders, hidden) {
       PER_ROW - row.length
     )}</tr>`;
   }
-  const more = partners.total > partners.list.length ? `See all ${partnerCount(partners.total)} offers` : 'See every offer';
+  const more =
+    partners.total > partners.list.length
+      ? TEXT.seeAllOffers(partnerCount(partners.total), host)
+      : TEXT.seeEveryOffer(host);
   return `
   <div style="padding:4px 0 18px 0;">
-    ${columnHeading('Circle - member benefits', 'Partner offers')}
-    <p style="margin:2px 0 6px 0; font-family:${SANS}; font-size:13.5px; line-height:1.6; color:${INK};">Through Circle, ${PARTNER_SCHOOL} families and staff get special prices from our partners. Log in at <a href="${escapeHtml(
-      site
-    )}" target="_blank" style="color:${BRAND}; font-weight:600;">${escapeHtml(host)}</a> to see each offer and how to use it.</p>
+    ${columnHeading(TEXT.memberBenefits, TEXT.partnerOffers)}
+    <p style="margin:2px 0 6px 0; font-family:${SANS}; font-size:13.5px; line-height:1.6; color:${INK};">${TEXT.partnersIntro(
+      escapeHtml(PARTNER_SCHOOL),
+      `<a href="${escapeHtml(site)}" target="_blank" style="color:${BRAND}; font-weight:600;">${escapeHtml(host)}</a>`
+    )}</p>
     <table role="presentation" class="pt-table${longWord ? ' pt-two' : ''}" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; table-layout:fixed;">
       <tbody class="pt-body">${rows}</tbody>
     </table>
     <table role="presentation" align="center" cellpadding="0" cellspacing="0" style="border-collapse:separate; margin:12px auto 0 auto;">
       <tr><td style="background:${BRAND}; border-radius:999px; padding:10px 22px;">
-        <a href="${escapeHtml(site)}" target="_blank" style="font-family:${SANS}; font-size:13.5px; font-weight:800; color:#ffffff; text-decoration:none;">${more} on ${escapeHtml(
-          host
-        )} &rsaquo;</a>
+        <a href="${escapeHtml(site)}" target="_blank" style="font-family:${SANS}; font-size:13.5px; font-weight:800; color:#ffffff; text-decoration:none;">${escapeHtml(more)} &rsaquo;</a>
       </td></tr>
     </table>
   </div>`;
@@ -914,11 +921,11 @@ function renderFooter(footerNote, newsletterName, schoolName, issueDateLabel) {
     <tr>
       <td class="foot-pad" align="center" style="background:${BRAND_DEEP}; padding:26px 24px 24px 24px;">
         ${directoryHtml}
-        <p style="margin:0; font-family:${SERIF}; font-size:19px; font-weight:800; letter-spacing:3px; color:#ffffff;">${escapeHtml(
-    newsletterName.toUpperCase()
+        <p style="margin:0; font-family:${SERIF}; font-size:19px; font-weight:800; ${track(newsletterName, 3)} color:#ffffff;">${escapeHtml(
+    caps(newsletterName)
   )}</p>
-        <p style="margin:7px 0 0 0; font-family:${SANS}; font-size:10px; letter-spacing:2px; color:${ACCENT};">NEWSLETTER BY ${escapeHtml(
-    schoolName.toUpperCase()
+        <p style="margin:7px 0 0 0; font-family:${SANS}; font-size:10px; ${track(TEXT.newsletterBy, 2)} color:${ACCENT};">${escapeHtml(
+    `${TEXT.newsletterBy} ${caps(schoolName)}`
   )}</p>
         <p style="margin:12px 0 0 0; font-family:${SANS}; font-size:11px; color:${ACCENT_SOFT};">${escapeHtml(
     issueDateLabel
@@ -962,7 +969,7 @@ function renderNewsletter(data) {
     calendarUrl = '',
   } = data;
 
-  const issueDateLabel = formatIssueDate(issueDate);
+  const issueDateLabel = issueDateText(issueDate);
   const placeholders = Boolean(data.placeholders);
   const editable = Boolean(data.editable);
   const fontBase = data.fontBase || '';
@@ -1048,7 +1055,7 @@ function renderNewsletter(data) {
             ? `<div style="margin-top:14px;">${accentDivider(36, 'center')}</div>
         <p style="margin:10px 0 0 0; font-family:${SANS}; font-size:10px; font-weight:600; letter-spacing:3px; text-transform:uppercase; color:${ACCENT};"${
                 editable && quote.weekStart ? ` data-edit="quote:${quote.weekStart}:author"` : ''
-              }>${escapeHtml(editable ? quote.author : quote.author.toUpperCase())}</p>`
+              }>${escapeHtml(editable ? quote.author : caps(quote.author))}</p>`
             : ''
         }
       </td>
@@ -1089,17 +1096,17 @@ ${fontFaceCss(fontBase)}
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td class="mast-cell" valign="bottom">
-              <h1 class="mast-title" style="margin:0; font-family:${SERIF}; font-size:52px; font-weight:800; letter-spacing:5px; line-height:1; color:#ffffff;">${escapeHtml(
-    newsletterName.toUpperCase()
+              <h1 class="mast-title" style="margin:0; font-family:${SERIF}; font-size:52px; font-weight:800; ${track(newsletterName, 5)} line-height:1; color:#ffffff;">${escapeHtml(
+    caps(newsletterName)
   )}</h1>
             </td>
             <td class="mast-side" align="right" valign="bottom" style="padding-left:12px;">
-              <p style="margin:0 0 3px 0; font-family:${SANS}; font-size:9px; font-weight:600; letter-spacing:3px; color:${ACCENT};">NEWSLETTER BY</p>
+              <p style="margin:0 0 3px 0; font-family:${SANS}; font-size:9px; font-weight:600; ${track(TEXT.newsletterBy, 3)} color:${ACCENT};">${escapeHtml(TEXT.newsletterBy)}</p>
               <p style="margin:0; font-family:${SANS}; font-size:12px; font-weight:600; color:#ffffff;">${escapeHtml(
     schoolName
   )}</p>
-              <p style="margin:5px 0 0 0; font-family:${SANS}; font-size:9px; letter-spacing:2px; color:${ACCENT_SOFT};">WEEKLY &bull; ${escapeHtml(
-    issueDateLabel.toUpperCase()
+              <p style="margin:5px 0 0 0; font-family:${SANS}; font-size:9px; ${track(TEXT.monthly, 2)} color:${ACCENT_SOFT};">${escapeHtml(TEXT.monthly)} &bull; ${escapeHtml(
+    issueMonth(issueDate)
   )}</p>
             </td>
           </tr>

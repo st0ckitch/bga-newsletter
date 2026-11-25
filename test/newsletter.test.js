@@ -33,23 +33,23 @@ test('renderNewsletter includes all template sections', () => {
   assert.match(html, /FiraGO/);
   assert.match(html, /font-weight:800/);
   assert.match(html, /font-weight:300/);
-  assert.match(html, /NEWSLETTER BY/);
+  assert.match(html, /ბიულეტენს გამოსცემს/);
   assert.match(html, /Dream big/);
-  assert.match(html, /Upcoming Events/);
+  assert.match(html, /მოახლოებული ღონისძიებები/);
   assert.match(html, /Sports Day/);
-  assert.match(html, /PRINCIPAL&#39;S MESSAGE/);
+  assert.match(html, /დირექტორის მიმართვა/);
   assert.match(html, /Welcome back\./);
   assert.match(html, /Khachapuri Baking/);
-  assert.match(html, /28th August, 2026/);
+  assert.match(html, /28 აგვისტო, 2026/);
   assert.match(html, /bga\.ge\/calendar/);
 });
 
 test('layout order: calendar and principal fixed on top, then the article columns', () => {
   const html = renderNewsletter(baseData);
-  const events = html.indexOf('Upcoming Events');
+  const events = html.indexOf('მოახლოებული ღონისძიებები');
   // The desktop copy of the principal block (the mobile-only copy legitimately
   // renders earlier in the source, before the fixed top block).
-  const principal = html.indexOf('PRINCIPAL&#39;S MESSAGE', html.indexOf('class="desk-principal"'));
+  const principal = html.indexOf('დირექტორის მიმართვა', html.indexOf('class="desk-principal"'));
   const slotD = html.indexOf('Tennis &lt;win&gt;');
   const slotE = html.indexOf('Khachapuri Baking');
   assert.ok(events !== -1 && slotD !== -1 && principal !== -1 && slotE !== -1);
@@ -63,10 +63,10 @@ test('principal portrait renders beside the message when provided', () => {
     ...baseData,
     principalMessage: { body: 'Dear Parents', photoUrl: 'http://x/principal.jpg' },
   });
-  assert.match(html, /alt="Principal"/);
+  assert.match(html, /alt="დირექტორი"/);
   assert.match(html, /principal\.jpg/);
   const without = renderNewsletter(baseData);
-  assert.ok(!/alt="Principal"/.test(without));
+  assert.ok(!/alt="დირექტორი"/.test(without));
 });
 
 test('footer staff directory renders names and titles', () => {
@@ -136,7 +136,7 @@ test('empty data renders without placeholders by default', () => {
     articles: [],
   });
   assert.match(html, /BGA NEWSLETTER/);
-  assert.ok(!/Upcoming Events/.test(html));
+  assert.ok(!/მოახლოებული ღონისძიებები/.test(html));
   assert.ok(!/SECTION [A-I]/.test(html));
 });
 
@@ -176,7 +176,7 @@ test('multi-day events show a range; month-boundary ranges spell out the end mon
     events: [{ title: 'Book Fair', event_date: '2026-08-31', end_date: '2026-09-02', time_note: null, location: null }],
   });
   assert.ok(!cross.includes('-2'));
-  assert.match(cross, /Until 2 September/);
+  assert.match(cross, /2 სექტემბრის ჩათვლით/);
 });
 
 test('escapeHtml covers the special characters', () => {
@@ -267,7 +267,7 @@ test('masthead background image renders email-safe with the brand-colour fallbac
 test('mobile: principal message stacks first, before events; desktop keeps it in the right column', () => {
   const html = renderNewsletter(baseData);
   const mob = html.indexOf('class="mob-principal"');
-  const events = html.indexOf('Upcoming Events');
+  const events = html.indexOf('მოახლოებული ღონისძიებები');
   const desk = html.indexOf('class="desk-principal"');
   assert.ok(mob !== -1 && desk !== -1, 'both principal copies present');
   assert.ok(mob < events, 'mobile principal copy comes before the events block in source order');

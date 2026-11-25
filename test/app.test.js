@@ -472,7 +472,7 @@ test('principal message accepts a portrait photo shown in the preview', async ()
   });
   assert.strictEqual(res.status, 302);
   const preview = await (await get('/newsletter/preview.html')).text();
-  assert.match(preview, /alt="Principal"/);
+  assert.match(preview, /alt="დირექტორი"/);
   assert.match(preview, /Test quote/);
 });
 
@@ -732,7 +732,7 @@ test('pasted links become hyperlinks: Google Drive without https, and in event n
   assert.match(html, /<a href="https:\/\/forms\.gle\/frm1"[^>]*>this form<\/a>/);
   // ...with no nearby phrase it falls back to a short service label, and the
   // trailing ")." stays out of the URL.
-  assert.match(html, /<a href="https:\/\/forms\.gle\/xyz"[^>]*>Open the form&nbsp;&rsaquo;<\/a>/);
+  assert.match(html, /<a href="https:\/\/forms\.gle\/xyz"[^>]*>გახსენით ფორმა&nbsp;&rsaquo;<\/a>/);
   assert.ok(!html.includes('href="https://forms.gle/xyz)'));
   assert.ok(!/>https?:\/\//.test(html), 'raw URL text never shows in the article');
 
@@ -805,10 +805,10 @@ test('band articles get wide photos; head-of-grade portrait sits at the top; 4-p
   const cardStart = preview.indexOf('Band Photo Story');
   const card = preview.slice(cardStart, cardStart + 6000);
   // The portrait renders before the body text, small like the principal's.
-  const headIdx = card.indexOf('alt="Section head"');
+  const headIdx = card.indexOf('alt="სექციის ხელმძღვანელი"');
   assert.ok(headIdx > -1, 'section head portrait renders');
   assert.ok(headIdx < card.indexOf('Wide photos please.'), 'portrait sits above the text');
-  assert.match(card, /alt="Section head" width="96"/);
+  assert.match(card, /alt="სექციის ხელმძღვანელი" width="96"/);
   // Band photos use the wide rows: a lone 4:3 photo fills 622, a pair 307 each.
   assert.match(card, /class="ph-one" width="622"/);
   assert.match(card, /class="ph-two" width="307"/);
@@ -1568,10 +1568,10 @@ test('school menus: managers curate titled links; the newsletter shows them as b
   // the section renders between the principal's message and Whole School,
   // with each title as a clickable button
   const preview = await (await get('/newsletter/preview.html')).text();
-  assert.match(preview, /SCHOOL MENUS/);
+  assert.match(preview, /სასკოლო მენიუ/);
   assert.match(preview, /href="https:\/\/bga\.ge\/menus\/foundation\.pdf"/);
   assert.match(preview, /Year 6-13 &rarr;/);
-  assert.ok(preview.indexOf('SCHOOL MENUS') > preview.indexOf('Upcoming Events'), 'menus sit below the top block');
+  assert.ok(preview.indexOf('სასკოლო მენიუ') > preview.indexOf('მოახლოებული ღონისძიებები'), 'menus sit below the top block');
 
   // editing a link in place
   const id = db.prepare("SELECT id FROM menus WHERE title = 'Foundation'").get().id;
@@ -1586,7 +1586,7 @@ test('school menus: managers curate titled links; the newsletter shows them as b
   // no links: the sent draft has no menus section, the preview shows the hint
   db.prepare('DELETE FROM menus').run();
   const result = await generateIssue({ trigger: 'test-menus' });
-  assert.ok(!result.html.includes('SCHOOL MENUS'), 'empty menus stay out of the draft');
+  assert.ok(!result.html.includes('სასკოლო მენიუ'), 'empty menus stay out of the draft');
   assert.match(await (await get('/newsletter/preview.html')).text(), /School menus/);
 });
 
@@ -1753,15 +1753,15 @@ test('house points strip (fixed under the principal) and the primary awards tabl
   assert.strictEqual(db.prepare('SELECT color FROM houses WHERE id = ?').get(phoenix.id).color, palette.brand);
 
   let preview = await (await get('/newsletter/preview.html')).text();
-  assert.match(preview, /House Points/);
+  assert.match(preview, /სახლების ქულები/);
   assert.ok(preview.includes(`/uploads/${logo}`), 'logo renders');
   assert.ok(preview.includes(`background:${tigers}`), 'tile painted in the house colour');
-  assert.match(preview, /205 Points/);
+  assert.match(preview, /205 ქულა/);
   // The strip is fixed below the events/principal top block...
-  assert.ok(preview.indexOf('House Points') > preview.indexOf('Upcoming Events'), 'sits under the top block');
+  assert.ok(preview.indexOf('სახლების ქულები') > preview.indexOf('მოახლოებული ღონისძიებები'), 'sits under the top block');
   // ...and the leader (most points) comes first with the gold treatment.
   assert.ok(preview.indexOf('Dragon') < preview.indexOf('Phoenix'), 'leader first');
-  assert.match(preview, /LEADING/);
+  assert.match(preview, /ლიდერი/);
   // Updating points reorders next issue's strip - logos and names stay.
   await post(`/houses/${phoenix.id}`, { name: 'Phoenix', points: '400' });
   preview = await (await get('/newsletter/preview.html')).text();
@@ -1770,11 +1770,11 @@ test('house points strip (fixed under the principal) and the primary awards tabl
   // The strip can be hidden from the newsletter without losing any data.
   assert.strictEqual((await post('/houses/visibility', { visible: '0' })).status, 302);
   const hiddenExport = await (await get('/newsletter/export.html')).text();
-  assert.ok(!hiddenExport.includes('House Points'), 'hidden strip stays out of the email');
+  assert.ok(!hiddenExport.includes('სახლების ქულები'), 'hidden strip stays out of the email');
   assert.match(await (await get('/newsletter/preview.html')).text(), /House Points - hidden/);
   assert.ok(db.prepare('SELECT COUNT(*) AS c FROM houses').get().c >= 2, 'houses kept while hidden');
   await post('/houses/visibility', { visible: '1' });
-  assert.match(await (await get('/newsletter/export.html')).text(), /House Points/);
+  assert.match(await (await get('/newsletter/export.html')).text(), /სახლების ქულები/);
 
   // Rewards: the topic title plus a class row from an ordinary staff member.
   await post('/awards/topic', { title: 'Generosity of Spirit Certificate Winners 12.12.25' });
@@ -1783,11 +1783,11 @@ test('house points strip (fixed under the principal) and the primary awards tabl
   assert.strictEqual(add.status, 302);
   const row = db.prepare("SELECT * FROM awards WHERE grade_stage = 'Year 3W'").get();
   preview = await (await get('/newsletter/preview.html')).text();
-  assert.match(preview, /Primary Certificates of Recognition/);
+  assert.match(preview, /დაწყებითი საფეხურის სიგელები/);
   assert.match(preview, /Generosity of Spirit Certificate Winners 12\.12\.25/);
   assert.match(preview, /Year 3W/);
   assert.match(preview, /Marta, Renee/);
-  assert.match(preview, /Congratulations to all our winners!/);
+  assert.match(preview, /გილოცავთ ყველა გამარჯვებულს!/);
   // ...another staff member cannot touch it, its author and managers can.
   const rival = await makeUser('Other Teacher', 'other.teacher@test.local', 'staff');
   assert.strictEqual((await rival.post(`/awards/${row.id}`, { class_name: 'X', students: 'Y' })).status, 403);
@@ -1975,7 +1975,7 @@ test('weekly email subject: SLT/principal/marketing edit it, generation uses it'
   result = await generateIssue({ trigger: 'test-subject-default' });
   stepRow = result.steps.find((s) => s.label === 'Catchy email subject set');
   assert.ok(stepRow && !stepRow.ok, 'default subject step nudges');
-  assert.match(stepRow.detail, /Weekly Newsletter/);
+  assert.match(stepRow.detail, /ყოველთვიური ბიულეტენი/);
 
   db.prepare('DELETE FROM email_subjects WHERE week_start = ?').run(week);
   db.prepare("DELETE FROM users WHERE email IN ('subject.slt@test.local', 'subject.staff@test.local')").run();
@@ -2135,7 +2135,7 @@ test('circle partner offers come from the Circle feed into the preview and the e
     assert.strictEqual((await refreshPartners()).error, 'not configured');
     assert.match(await (await get('/newsletter/preview.html')).text(), /appear here automatically/);
     assert.ok(!(await (await get('/settings')).text()).includes('CIRCLE_FEED_URL'), 'no setup instructions on the dashboard');
-    assert.ok(!(await (await get('/newsletter/export.html')).text()).includes('Partner offers'));
+    assert.ok(!(await (await get('/newsletter/export.html')).text()).includes('პარტნიორების შეთავაზებები'));
 
     config.circle.feedUrl = `${site}/newsletter/bga/offers`;
     config.circle.token = 'feed-token-123';
@@ -2145,7 +2145,7 @@ test('circle partner offers come from the Circle feed into the preview and the e
     // This week's four partners appear in the preview and the email, five
     // tiles to a row: four partners and one empty filler, which phones drop.
     const email = await (await get('/newsletter/export.html')).text();
-    assert.match(email, /Partner offers/);
+    assert.match(email, /პარტნიორების შეთავაზებები/);
     assert.strictEqual((email.match(/class="pt-cell" width="20%" valign="top"/g) || []).length, 4, 'four partners this issue');
     assert.strictEqual((email.match(/class="pt-fill"/g) || []).length, 1, 'one filler completes the row');
     assert.match(email, /\.pt-fill \{ display: none !important; \}/);
@@ -2157,26 +2157,26 @@ test('circle partner offers come from the Circle feed into the preview and the e
     // Logo and badge only - the partner's name is just the logo's alt text.
     assert.ok(!/>Partner \d+</.test(email), 'no partner names printed');
     assert.match(email, new RegExp(`background:${palette.accent};color:${palette.brandDeep}">-\\d+%`));
-    assert.match(email, /See all 10\+ offers on 127\.0\.0\.1/);
+    assert.match(email, /ნახეთ 10\+ შეთავაზება 127\.0\.0\.1:\d+-ზე/);
     const week = generationWeekStart();
     const thisIssue = partnersForWeek(week, 4).list.map((p) => p.partner);
     const nextIssue = partnersForWeek(addDays(week, 7), 4).list.map((p) => p.partner);
     assert.notDeepStrictEqual(thisIssue, nextIssue, 'a different set every week');
     for (const name of thisIssue) assert.ok(email.includes(`alt="${name}"`));
     // It sits at the bottom, just above the footer.
-    assert.ok(email.indexOf('Partner offers') > email.indexOf('Upcoming Events'));
+    assert.ok(email.indexOf('პარტნიორების შეთავაზებები') > email.indexOf('მოახლოებული ღონისძიებები'));
     assert.match(await (await get('/settings')).text(), /10 partners/);
 
     // If Circle cannot be reached, the last copy keeps the section going.
     failing = true;
     assert.strictEqual((await refreshPartners()).ok, false);
-    assert.match(await (await get('/newsletter/export.html')).text(), /Partner offers/);
+    assert.match(await (await get('/newsletter/export.html')).text(), /პარტნიორების შეთავაზებები/);
     assert.match(await (await get('/settings')).text(), /Circle could not be reached/);
     failing = false;
 
     // The section can be hidden, and shown again.
     await post('/settings/partners', { partners_per_issue: '4' });
-    assert.ok(!(await (await get('/newsletter/export.html')).text()).includes('Partner offers'));
+    assert.ok(!(await (await get('/newsletter/export.html')).text()).includes('პარტნიორების შეთავაზებები'));
     assert.match(await (await get('/newsletter/preview.html')).text(), /Partner offers - hidden/);
     await post('/settings/partners', { partners_per_issue: '0', partners_visible: '1' });
     const all = await (await get('/newsletter/export.html')).text();
