@@ -915,8 +915,8 @@ function renderFooter(footerNote, newsletterName, schoolName, issueDateLabel) {
         <p style="margin:0; font-family:${SERIF}; font-size:19px; font-weight:800; ${track(newsletterName, 3)} color:#ffffff;">${escapeHtml(
     caps(newsletterName)
   )}</p>
-        <p style="margin:7px 0 0 0; font-family:${SANS}; font-size:10px; ${track(TEXT.newsletterBy, 2)} color:${ACCENT};">${escapeHtml(
-    `${TEXT.newsletterBy} ${caps(schoolName)}`
+        <p style="margin:7px 0 0 0; font-family:${SANS}; font-size:10px; ${track(schoolName, 2)} color:${ACCENT};">${escapeHtml(
+    caps(schoolName)
   )}</p>
         <p style="margin:12px 0 0 0; font-family:${SANS}; font-size:11px; color:${ACCENT_SOFT};">${escapeHtml(
     issueDateLabel
@@ -1092,7 +1092,6 @@ ${fontFaceCss(fontBase)}
   )}</h1>
             </td>
             <td class="mast-side" align="right" valign="bottom" style="padding-left:12px;">
-              <p style="margin:0 0 3px 0; font-family:${SANS}; font-size:9px; font-weight:600; ${track(TEXT.newsletterBy, 3)} color:${ACCENT};">${escapeHtml(TEXT.newsletterBy)}</p>
               <p style="margin:0; font-family:${SANS}; font-size:12px; font-weight:600; color:#ffffff;">${escapeHtml(
     schoolName
   )}</p>

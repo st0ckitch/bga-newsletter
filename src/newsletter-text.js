@@ -59,8 +59,7 @@ function untilDate(dateStr) {
 }
 
 const TEXT = {
-  // Masthead and footer
-  newsletterBy: 'ბიულეტენს გამოსცემს',
+  // Masthead
   monthly: 'ყოველთვიური',
   // Default email subject tail, when nobody writes one on the Preview page.
   defaultSubject: 'ყოველთვიური ბიულეტენი',

@@ -33,7 +33,8 @@ test('renderNewsletter includes all template sections', () => {
   assert.match(html, /FiraGO/);
   assert.match(html, /font-weight:800/);
   assert.match(html, /font-weight:300/);
-  assert.match(html, /ბიულეტენს გამოსცემს/);
+  assert.ok(!html.includes('ბიულეტენს გამოსცემს'), 'no "newsletter by" line');
+  assert.match(html, /British-Georgian Academy/);
   assert.match(html, /Dream big/);
   assert.match(html, /ღონისძიებების კალენდარი/);
   assert.match(html, /Sports Day/);
