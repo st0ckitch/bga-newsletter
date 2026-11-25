@@ -58,7 +58,7 @@ palette.houseColors = {
 const identity = {
   // Masthead wordmark and the footer lockup. Also the default for the
   // `newsletter_name` setting, which staff can change under Settings.
-  newsletterName: 'BGA Newsletter',
+  newsletterName: 'BGA სიახლეები',
   // Printed as "Newsletter by ..." beside the masthead.
   schoolName: 'British-Georgian Academy',
   // Short form, for page titles and the admin top bar.

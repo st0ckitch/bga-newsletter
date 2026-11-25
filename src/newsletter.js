@@ -7,7 +7,7 @@
 //   D/F/H and E/G/I - admin-assigned article slots in the left and right
 //   columns, each article under a colored header bar with its photos
 //   Footer - staff directory grid + branding.
-const { TEXT, monthName, weekdayShort, issueDate: issueDateText, issueMonth, untilDate } = require('./newsletter-text');
+const { TEXT, GEORGIAN_RE, caps, monthName, weekdayShort, issueDate: issueDateText, issueMonth, untilDate } = require('./newsletter-text');
 const { LEFT_SLOTS, RIGHT_SLOTS, CONTENT_SLOTS, WIDE_SLOTS, DEFAULT_SLOT, MAX_ARTICLE_WORDS } = require('./slots');
 const { palette, identity } = require('./brand');
 const { SECTIONS } = require('./sections');
@@ -26,15 +26,6 @@ const INK = palette.ink;
 const MUTED = palette.muted;
 const CARD_BORDER = palette.cardBorder;
 const BAR_COLORS = palette.barColors;
-
-const GEORGIAN_RE = /[\u10A0-\u10FF\u1C90-\u1CBF\u2D00-\u2D2F]/;
-
-// Capitals for Latin labels only. Georgian has no capital letters - upper-
-// casing it produces Mtavruli, which most email clients' fonts can't show.
-function caps(text) {
-  const s = String(text || '');
-  return GEORGIAN_RE.test(s) ? s : s.toUpperCase();
-}
 
 // Letter-spacing for a small label: the wide tracking that suits Latin
 // capitals pulls Georgian words apart, so Georgian stays close to normal.
@@ -623,7 +614,7 @@ function renderHousePointsBlock(houses, placeholders, hidden) {
     const logo = h.logoUrl
       ? `<img src="${escapeHtml(h.logoUrl)}" alt="" width="110" style="width:110px; height:110px; object-fit:contain; display:block; margin:0 auto 14px auto;">`
       : `<p style="margin:0 0 12px 0; font-family:${SERIF}; font-size:64px; font-weight:800; line-height:1; color:${text.name};">${escapeHtml(
-          (h.name || '?').charAt(0).toUpperCase()
+          caps((h.name || '?').charAt(0))
         )}</p>`;
     return `
       <td class="hp-cell" width="50%" valign="top" style="padding:6px;">
@@ -1208,7 +1199,7 @@ ${fontFaceCss(fontBase || '')}
   <center>
   <table role="presentation" class="sheet" width="560" cellpadding="0" cellspacing="0" style="border-collapse:collapse; width:560px; max-width:100%; background:#ffffff; margin:24px 0;">
     <tr><td height="5" style="background:${ACCENT}; font-size:0; line-height:0;">&nbsp;</td></tr>
-    <tr><td style="background:${BRAND_DEEP}; padding:18px 26px; font-family:${SERIF}; font-size:24px; font-weight:800; letter-spacing:3px; color:#ffffff;">${escapeHtml(identity.newsletterName.toUpperCase())}</td></tr>
+    <tr><td style="background:${BRAND_DEEP}; padding:18px 26px; font-family:${SERIF}; font-size:24px; font-weight:800; letter-spacing:3px; color:#ffffff;">${escapeHtml(caps(identity.newsletterName))}</td></tr>
     <tr><td style="background:${escapeHtml(headingColor)}; padding:14px 26px; font-family:${SANS}; font-size:17px; font-weight:600; color:#ffffff;">${escapeHtml(
     heading
   )}</td></tr>

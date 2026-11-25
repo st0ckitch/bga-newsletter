@@ -20,7 +20,7 @@
     </form>
 
     <h2 style="margin-top:22px;">Masthead background image</h2>
-    <p class="muted">Shown behind &quot;<%= settings.newsletter_name.toUpperCase() %>&quot; in the newsletter header. <strong>Recommended:</strong> a wide banner around <strong>1360 × 400 px</strong>, JPEG/PNG, under <strong>1 MB</strong>, <strong>dark</strong> (a deep shade of the school colour works best) so the white title stays readable. Email clients that block background images fall back to the plain brand-coloured header.</p>
+    <p class="muted">Shown behind &quot;<%= caps(settings.newsletter_name) %>&quot; in the newsletter header. <strong>Recommended:</strong> a wide banner around <strong>1360 × 400 px</strong>, JPEG/PNG, under <strong>1 MB</strong>, <strong>dark</strong> (a deep shade of the school colour works best) so the white title stays readable. Email clients that block background images fall back to the plain brand-coloured header.</p>
     <% if (mastheadPhoto) { %>
       <div class="photo-grid"><div class="photo-tile">
         <img src="/uploads/<%= mastheadPhoto %>" alt="Masthead background">

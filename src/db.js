@@ -294,6 +294,14 @@ db.prepare("UPDATE settings SET value = '0 18 * * 4' WHERE key = 'friday_generat
 // Gmail with all of them. Databases on the old default of 8, or on the 10 a
 // short-lived update set, go back to all of them - once. A number chosen after
 // this is left alone.
+// The newsletter is called "BGA სიახლეები" (it was "BGA Newsletter"). A site
+// still on the old name, saved under Settings, takes the new one - once; a
+// name chosen after this is left alone.
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'newsletter_name_ka'").get()) {
+  db.prepare("UPDATE settings SET value = ? WHERE key = 'newsletter_name' AND value = 'BGA Newsletter'").run(identity.newsletterName);
+  db.prepare("INSERT INTO settings (key, value) VALUES ('newsletter_name_ka', '1')").run();
+}
+
 if (!db.prepare("SELECT 1 FROM settings WHERE key = 'partners_per_issue_all'").get()) {
   db.prepare("UPDATE settings SET value = '0' WHERE key = 'partners_per_issue' AND value IN ('8', '10')").run();
   db.prepare("INSERT INTO settings (key, value) VALUES ('partners_per_issue_all', '1')").run();

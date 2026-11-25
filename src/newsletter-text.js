@@ -18,6 +18,15 @@ const MONTHS_GENITIVE = [
 // Monday first, as on the event date tiles.
 const WEEKDAYS_SHORT = ['ორშ', 'სამ', 'ოთხ', 'ხუთ', 'პარ', 'შაბ', 'კვი'];
 
+const GEORGIAN_RE = /[\u10A0-\u10FF\u1C90-\u1CBF\u2D00-\u2D2F]/;
+
+// Capitals for Latin labels only. Georgian has no capital letters - upper-
+// casing it produces Mtavruli, which most email clients' fonts can't show.
+function caps(text) {
+  const s = String(text || '');
+  return GEORGIAN_RE.test(s) ? s : s.toUpperCase();
+}
+
 const parse = (dateStr) => String(dateStr).split('-').map(Number);
 
 // "ნოემბერი" for 2026-11-13.
@@ -100,4 +109,4 @@ const TEXT = {
   sectionHeadAlt: 'სექციის ხელმძღვანელი',
 };
 
-module.exports = { TEXT, MONTHS, monthName, weekdayShort, issueDate, issueMonth, untilDate };
+module.exports = { TEXT, GEORGIAN_RE, caps, MONTHS, monthName, weekdayShort, issueDate, issueMonth, untilDate };

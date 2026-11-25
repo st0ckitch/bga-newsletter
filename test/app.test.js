@@ -326,7 +326,7 @@ test('newsletter preview renders submitted content', async () => {
   const res = await get('/newsletter/preview.html');
   assert.strictEqual(res.status, 200);
   const html = await res.text();
-  assert.match(html, /BGA NEWSLETTER/);
+  assert.match(html, /BGA სიახლეები/);
   assert.match(html, /Test Sports Day/);
   assert.match(html, /Big Tennis Win/);
 });
@@ -479,7 +479,7 @@ test('principal message accepts a portrait photo shown in the preview', async ()
 test('preview falls back gracefully on a garbage ?week parameter', async () => {
   const res = await get('/newsletter/preview.html?week=garbage');
   assert.strictEqual(res.status, 200);
-  assert.match(await res.text(), /BGA NEWSLETTER/);
+  assert.match(await res.text(), /BGA სიახლეები/);
 });
 
 test('an ongoing multi-day event stays in the newsletter after its start date', async () => {
@@ -514,7 +514,7 @@ test('generateIssue works without Mailchimp and records warnings', async () => {
   const result = await generateIssue({ trigger: 'test' });
   assert.strictEqual(result.status, 'local_only');
   assert.ok(result.warnings.some((w) => /Mailchimp is not configured/.test(w)));
-  assert.match(result.html, /BGA NEWSLETTER/);
+  assert.match(result.html, /BGA სიახლეები/);
   const row = db.prepare('SELECT * FROM issues WHERE week_start = ?').get(result.weekStart);
   assert.ok(row, 'issue row stored');
 });

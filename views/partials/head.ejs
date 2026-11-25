@@ -12,7 +12,7 @@
 <% if (currentUser) { %>
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="/"><%= brand.newsletterName.toUpperCase() %> <span>admin</span></a>
+    <a class="brand" href="/"><%= caps(brand.newsletterName) %> <span>admin</span></a>
     <nav>
       <a href="/">Dashboard</a>
       <a href="/events">Events</a>

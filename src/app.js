@@ -16,6 +16,8 @@ function createApp() {
   // as `brand` and `palette`.
   app.locals.brand = identity;
   app.locals.palette = palette;
+  // Capitals that leave Georgian alone (upper-cased it turns into Mtavruli).
+  app.locals.caps = require('./newsletter-text').caps;
 
   app.use(
     helmet({
