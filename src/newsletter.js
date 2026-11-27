@@ -7,7 +7,7 @@
 //   D/F/H and E/G/I - admin-assigned article slots in the left and right
 //   columns, each article under a colored header bar with its photos
 //   Footer - staff directory grid + branding.
-const { TEXT, GEORGIAN_RE, caps, monthName, weekdayShort, issueDate: issueDateText, issueMonth, untilDate } = require('./newsletter-text');
+const { TEXT, CIRCLE_NEWS, GEORGIAN_RE, caps, monthName, weekdayShort, issueDate: issueDateText, issueMonth, untilDate } = require('./newsletter-text');
 const { LEFT_SLOTS, RIGHT_SLOTS, CONTENT_SLOTS, WIDE_SLOTS, DEFAULT_SLOT, MAX_ARTICLE_WORDS } = require('./slots');
 const { palette, identity } = require('./brand');
 const { SECTIONS } = require('./sections');
@@ -104,6 +104,8 @@ const MOBILE_CSS = `
     .ph-one { width: auto !important; max-width: 100% !important; max-height: 400px !important; }
     .mob-principal { display: block !important; max-height: none !important; overflow: visible !important; }
     .desk-principal, .desk-principal-cell { display: none !important; }
+    .cn-pad { padding-left: 20px !important; padding-right: 20px !important; }
+    .cn-cta { padding: 22px 20px !important; }
     .dir-table, .dir-table tbody, .dir-table tr { display: block !important; width: 100% !important; }
     .dir-cell { display: block !important; width: 100% !important; text-align: center !important; padding: 5px 0 !important; }
     .dir-fill { display: none !important; }
@@ -892,6 +894,74 @@ function renderPartnersBlock(partners, placeholders, hidden) {
   </div>`;
 }
 
+/* ---------- Circle news: the 3 topics ---------- */
+
+// A news item from Circle, after the stories: BGA's logo and the headline on
+// BGA blue, the three topics parents chose, and an invitation to register.
+// Built from BGA's design (flex layout and SVG redrawn as email tables).
+const NEWS_TEXT = '#1d2b3a';
+const NEWS_TINT = tint(BRAND, 0.9);
+const NEWS_SOFT = tint(BRAND, 0.8);
+const NEWS_RULE = tint(BRAND, 0.3);
+
+function renderCircleNewsBlock(partners, base, placeholders, hidden) {
+  if (hidden) {
+    return placeholders
+      ? placeholderBox('CN', 'Circle news - hidden', 'Hidden from the newsletter - switch it back on under Settings.')
+      : '';
+  }
+  const N = CIRCLE_NEWS;
+  const site = ((partners && partners.site) || 'https://circle.bga.ge').replace(/\/+$/, '');
+  const host = site.replace(/^https?:\/\//, '');
+  const para = (html, last) =>
+    `<p style="margin:0 0 ${last ? 0 : 18}px 0; font-family:${SANS}; font-size:16px; font-weight:400; line-height:1.65; color:${NEWS_TEXT};">${html}</p>`;
+  const topics = N.topics
+    .map(
+      (t, i) => `
+      <tr><td style="padding:0 0 10px 0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; background:${NEWS_TINT}; border-radius:12px;">
+          <tr>
+            <td width="54" valign="middle" style="padding:14px 0 14px 18px;"><div style="width:36px; height:36px; border-radius:18px; background:${BRAND}; color:#ffffff; font-family:${SANS}; font-size:15px; font-weight:700; line-height:36px; text-align:center;">${
+              i + 1
+            }</div></td>
+            <td valign="middle" style="padding:14px 18px 14px 0; font-family:${SANS}; font-size:16px; font-weight:600; line-height:1.4; color:${BRAND_DEEP};">${escapeHtml(t)}</td>
+          </tr>
+        </table>
+      </td></tr>`
+    )
+    .join('');
+  return `
+  <div style="padding:6px 0 18px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; background:#ffffff; border:1px solid ${CARD_BORDER}; border-radius:14px;">
+      <tr><td class="cn-pad" style="background:${BRAND}; border-radius:13px 13px 0 0; padding:32px 44px;">
+        <img src="${escapeHtml(base)}/img/bga-logo-ka-white.png" alt="${escapeHtml(N.logoAlt)}" width="230" height="40" style="width:230px; height:auto; display:block; border:0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin:22px 0;"><tr><td height="1" style="background:${NEWS_RULE}; font-size:0; line-height:0;">&nbsp;</td></tr></table>
+        <p style="margin:0 0 10px 0; font-family:${SANS}; font-size:13px; font-weight:700; ${track(N.kicker, 2)} color:#ffffff;">${escapeHtml(N.kicker)}</p>
+        <h2 style="margin:0; font-family:${SERIF}; font-size:30px; font-weight:800; line-height:1.3; color:#ffffff;">${escapeHtml(N.title)}</h2>
+      </td></tr>
+      <tr><td class="cn-pad" style="padding:32px 44px 8px 44px;">
+        ${para(`${escapeHtml(N.intro[0])}<b style="font-weight:700;">${escapeHtml(N.intro[1])}</b>${escapeHtml(N.intro[2])}`)}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin:0 0 8px 0;">${topics}</table>
+        ${N.after.map((t, i) => para(escapeHtml(t), i === N.after.length - 1)).join('')}
+      </td></tr>
+      <tr><td class="cn-pad" style="padding:24px 44px 40px 44px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; background:${BRAND}; border-radius:16px;">
+          <tr><td class="cn-cta" style="padding:28px 30px;">
+            <p style="margin:0 0 12px 0; font-family:${SANS}; font-size:13px; font-weight:700; ${track(N.ctaKicker, 1)} color:${NEWS_SOFT};">${escapeHtml(N.ctaKicker)}</p>
+            <p style="margin:0 0 18px 0; font-family:${SANS}; font-size:20px; font-weight:700; line-height:1.45; color:#ffffff;">${escapeHtml(N.ctaText)}</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;">
+              <tr><td style="background:#ffffff; border-radius:999px; padding:14px 26px;"><a href="${escapeHtml(site)}/?join=1" target="_blank" style="font-family:${SANS}; font-size:16px; font-weight:700; color:${BRAND}; text-decoration:none;">${escapeHtml(
+                N.ctaButton
+              )} &rarr;</a></td></tr>
+            </table>
+            <p style="margin:12px 0 0 0; font-family:${SANS}; font-size:14px; font-weight:600; color:#ffffff;">${escapeHtml(host)}</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </div>`;
+}
+
 /* ---------- Join Circle: the invitation to register ---------- */
 
 // Right after the calendar and the principal's message: an invitation, in
@@ -1255,6 +1325,7 @@ ${fontFaceCss(fontBase)}
             <td class="col" width="${COL_W}" valign="top">${rightColumn || '&nbsp;'}</td>
           </tr>
         </table>
+        ${renderCircleNewsBlock(data.partners, fontBase, placeholders, data.circleNewsHidden)}
         ${renderAwardsBlock(data.awards, data.awardTopic, placeholders)}
       </td>
     </tr>

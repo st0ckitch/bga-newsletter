@@ -319,6 +319,8 @@ const SETTING_DEFAULTS = {
   // The "Join Circle" invitation after the calendar and the principal's
   // message, shown or hidden.
   circle_join_visible: '1',
+  // The Circle news item (the 3 topics) after the stories, shown or hidden.
+  circle_news_visible: '1',
   partners_per_issue: '0',
   // Reminder to fill in content - every Monday morning
   monday_reminder_cron: '0 9 * * 1',

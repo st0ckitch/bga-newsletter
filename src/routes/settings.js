@@ -64,6 +64,7 @@ router.post('/settings/partners', requireManager, (req, res) => {
   if (/^\d{1,3}$/.test(n)) setSetting('partners_per_issue', String(Number(n)));
   setSetting('partners_visible', req.body.partners_visible === '1' ? '1' : '0');
   setSetting('circle_join_visible', req.body.circle_join_visible === '1' ? '1' : '0');
+  setSetting('circle_news_visible', req.body.circle_news_visible === '1' ? '1' : '0');
   res.redirect('/settings');
 });
 

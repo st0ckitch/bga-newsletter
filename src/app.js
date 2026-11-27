@@ -48,6 +48,13 @@ function createApp() {
     })
   );
 
+  // Pictures the email itself shows (the BGA logo in the Circle news) are
+  // loaded by email apps from other sites, which helmet's default
+  // Cross-Origin-Resource-Policy would block.
+  app.use('/img', (req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  });
   app.use(express.static(path.join(__dirname, '..', 'public')));
   // Uploaded photos: filenames are random, and the same files are embedded in
   // the parents' newsletter, so they are served without auth. Email clients

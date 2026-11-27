@@ -86,7 +86,7 @@ test('renderNewsletter escapes user content', () => {
 
 test('photos render as one full-width photo + a pair at column widths', () => {
   const html = renderNewsletter(baseData);
-  const imgs = html.match(/<img /g) || [];
+  const imgs = html.match(/<img (?![^>]*bga-logo)/g) || []; // story photos (not the Circle news logo)
   assert.strictEqual(imgs.length, 3);
   assert.ok(html.indexOf('a.jpg') < html.indexOf('b.jpg'));
   // Sizes unknown here, so they count as 4:3 landscape: the lone photo fills
@@ -409,4 +409,22 @@ test('a long principal message pulls the next sections up under the events; a sh
 
   // The estimate follows the message's length.
   assert.ok(estimate.principal({ body: para }) < estimate.principal({ body: `${para}\n\n${para}` }));
+});
+
+test('Circle news: the 3 topics after the stories, before the awards; switched off in Settings', () => {
+  const awards = [{ award: 'Kindness', grade_stage: 'Year 3', student_name: 'Nino' }];
+  const html = renderNewsletter({ ...baseData, awards, awardTopic: 'Kindness', fontBase: 'https://news.example' });
+  const news = html.indexOf('ცნობილია 3 ყველაზე საინტერესო თემა');
+  assert.ok(news > html.indexOf('Tennis &lt;win&gt;'), 'after the stories');
+  assert.ok(news < html.indexOf('დაწყებითი საფეხურის სიგელები'), 'before the awards');
+  for (const topic of ['AI და მომავლის უნარები', 'სტრესის მართვა და ფსიქოლოგიური კეთილდღეობა', 'ტექნოლოგიები და ციფრული კეთილდღეობა']) {
+    assert.ok(html.includes(topic), topic);
+  }
+  assert.match(html, /<b style="font-weight:700;?">ზრდისა და განვითარების<\/b>/);
+  assert.match(html, /src="https:\/\/news\.example\/img\/bga-logo-ka-white\.png" alt="ბრიტანულ-ქართული აკადემია"/);
+  assert.match(html, /<a href="https:\/\/circle\.bga\.ge\/\?join=1"[^>]*>დარეგისტრირდით &rarr;<\/a>/);
+  assert.ok(!html.includes('<svg'), 'no SVG - email apps drop it');
+  const off = renderNewsletter({ ...baseData, circleNewsHidden: true });
+  assert.ok(!off.includes('ცნობილია 3 ყველაზე'));
+  assert.match(renderNewsletter({ ...baseData, circleNewsHidden: true, placeholders: true }), /Circle news - hidden/);
 });

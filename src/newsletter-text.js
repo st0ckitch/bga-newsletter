@@ -108,4 +108,31 @@ const TEXT = {
   sectionHeadAlt: 'სექციის ხელმძღვანელი',
 };
 
-module.exports = { TEXT, GEORGIAN_RE, caps, MONTHS, monthName, weekdayShort, issueDate, issueMonth, untilDate };
+// The Circle news item ("the 3 most interesting topics"), from BGA's design
+// of 27 November 2026. Shown in the middle of the newsletter, after the
+// stories; switched off under Settings once it has gone out.
+const CIRCLE_NEWS = {
+  kicker: 'CIRCLE · ზრდა და განვითარება',
+  title: 'ცნობილია 3 ყველაზე საინტერესო თემა',
+  logoAlt: 'ბრიტანულ-ქართული აკადემია',
+  // The intro, with its bold phrase in the middle.
+  intro: [
+    'CIRCLE პროგრამის ',
+    'ზრდისა და განვითარების',
+    ' მიმართულებაში მშობლების არჩევანით უკვე ცნობილია სამი ყველაზე საინტერესო თემა. პირველი აქტივობები სწორედ მათ დაეთმობა:',
+  ],
+  topics: [
+    'AI და მომავლის უნარები',
+    'სტრესის მართვა და ფსიქოლოგიური კეთილდღეობა',
+    'ტექნოლოგიები და ციფრული კეთილდღეობა',
+  ],
+  after: [
+    'აქტივობების ზუსტ თარიღებს უახლოეს დღეებში გაცნობებთ.',
+    'მადლობას ვუხდით ყველა მშობელს, ვინც CIRCLE-ში ჩაერთო და თავისი აზრი გაგვიზიარა.',
+  ],
+  ctaKicker: 'ჯერ არ დარეგისტრირებულხართ?',
+  ctaText: 'გელოდებით! დარეგისტრირდით CIRCLE-ზე და თქვენც შეძლებთ ამ ღონისძიებებზე დასწრებას.',
+  ctaButton: 'დარეგისტრირდით',
+};
+
+module.exports = { TEXT, CIRCLE_NEWS, GEORGIAN_RE, caps, MONTHS, monthName, weekdayShort, issueDate, issueMonth, untilDate };
