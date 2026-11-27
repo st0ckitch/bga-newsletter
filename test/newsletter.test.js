@@ -380,3 +380,33 @@ test('Join Circle: in Georgian and BGA colours, after the calendar and the princ
   assert.ok(!renderNewsletter({ ...baseData, joinCircleHidden: true }).includes('შემოუერთდით'));
   assert.match(renderNewsletter({ ...baseData, joinCircleHidden: true, placeholders: true }), /Join Circle - hidden/);
 });
+
+test('a long principal message pulls the next sections up under the events; a short one leaves them below', () => {
+  const { estimate } = require('../src/newsletter');
+  const para =
+    'ნოემბერში ასევე გაიმართა შეხვედრები მე-10 კლასის მოსწავლეებთან და მათ მშობლებთან სადიპლომო პროგრამის შესახებ. '.repeat(3);
+  const houses = ['Ilia', 'Rustaveli', 'Tamar Mepe', 'Pirosmani'].map((name, i) => ({ name, points: 90 - i * 10, color: '#22694c' }));
+  const menus = [{ title: '0-2 კლასი', url: 'https://example.com/m1' }];
+  const rich = { ...baseData, houses, menus };
+  const cellOf = (html) => html.indexOf('class="col desk-principal-cell"');
+
+  // Short message: the top block is just events | message, the rest follows.
+  const short = renderNewsletter(rich);
+  assert.ok(short.indexOf('შემოუერთდით Circle-ს') > cellOf(short), 'Join Circle below the top block');
+  assert.ok(short.indexOf('სახლების ქულები') > cellOf(short));
+
+  // Long message: Join Circle and House Points move into the events column,
+  // in order, before the message's cell; House Points switches to small tiles.
+  const long = renderNewsletter({ ...rich, principalMessage: { body: Array(7).fill(para).join('\n\n') } });
+  const join = long.indexOf('შემოუერთდით Circle-ს');
+  const housesAt = long.indexOf('სახლების ქულები');
+  assert.ok(join > long.indexOf('Sports Day') && join < cellOf(long), 'Join Circle under the events');
+  assert.ok(housesAt > join && housesAt < cellOf(long), 'House Points next, still beside the message');
+  assert.match(long, /width="64" style="width:64px;height:64px|font-size:40px;font-weight:800/, 'compact house tiles');
+  // Each section appears once.
+  assert.strictEqual(long.split('შემოუერთდით Circle-ს').length, 2);
+  assert.strictEqual(long.split('სახლების ქულები').length, 2);
+
+  // The estimate follows the message's length.
+  assert.ok(estimate.principal({ body: para }) < estimate.principal({ body: `${para}\n\n${para}` }));
+});

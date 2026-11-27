@@ -602,7 +602,7 @@ function houseTileText() {
   return { name: '#ffffff', points: '#ffffff' };
 }
 
-function renderHousePointsBlock(houses, placeholders, hidden) {
+function renderHousePointsBlock(houses, placeholders, hidden, { compact = false } = {}) {
   if (hidden) {
     return placeholders
       ? placeholderBox('HP', 'House Points - hidden', 'Hidden from the newsletter this week - switch it back on from the Houses page.')
@@ -613,22 +613,26 @@ function renderHousePointsBlock(houses, placeholders, hidden) {
       ? placeholderBox('HP', 'House Points', 'Add the houses (name, logo, points) on the Houses page.')
       : '';
   }
+  // Compact: half-width tiles in a column beside the principal's message.
+  const sz = compact
+    ? { logo: 64, gap: 8, initial: 40, pad: '16px 6px 14px 6px', name: 14, nameTrack: 1, points: 15, pointsGap: 6 }
+    : { logo: 110, gap: 14, initial: 64, pad: '28px 12px 24px 12px', name: 24, nameTrack: 4, points: 20, pointsGap: 10 };
   const tile = (h, leader) => {
     const color = h.color || BRAND;
     const text = houseTileText(color);
     const logo = h.logoUrl
-      ? `<img src="${escapeHtml(h.logoUrl)}" alt="" width="110" style="width:110px; height:110px; object-fit:contain; display:block; margin:0 auto 14px auto;">`
-      : `<p style="margin:0 0 12px 0; font-family:${SERIF}; font-size:64px; font-weight:800; line-height:1; color:${text.name};">${escapeHtml(
+      ? `<img src="${escapeHtml(h.logoUrl)}" alt="" width="${sz.logo}" style="width:${sz.logo}px; height:${sz.logo}px; object-fit:contain; display:block; margin:0 auto ${sz.gap}px auto;">`
+      : `<p style="margin:0 0 ${sz.gap}px 0; font-family:${SERIF}; font-size:${sz.initial}px; font-weight:800; line-height:1; color:${text.name};">${escapeHtml(
           caps((h.name || '?').charAt(0))
         )}</p>`;
     return `
       <td class="hp-cell" width="50%" valign="top" style="padding:6px;">
-        <div style="background:${escapeHtml(color)}; border-radius:4px; ${leader ? `outline:4px solid ${ACCENT}; ` : ''}padding:28px 12px 24px 12px; text-align:center;">
+        <div style="background:${escapeHtml(color)}; border-radius:4px; ${leader ? `outline:4px solid ${ACCENT}; ` : ''}padding:${sz.pad}; text-align:center;">
           ${logo}
-          <p style="margin:0; font-family:${SERIF}; font-size:24px; font-weight:800; letter-spacing:4px; color:${text.name}; text-transform:uppercase;">${escapeHtml(
+          <p style="margin:0; font-family:${SERIF}; font-size:${sz.name}px; font-weight:800; letter-spacing:${sz.nameTrack}px; line-height:1.2; color:${text.name}; text-transform:uppercase;">${escapeHtml(
       h.name
     )}</p>
-          <p style="margin:10px 0 0 0; font-family:${SANS}; font-size:20px; font-weight:700; color:${text.points};">${escapeHtml(TEXT.points(Number(h.points) || 0))}</p>
+          <p style="margin:${sz.pointsGap}px 0 0 0; font-family:${SANS}; font-size:${sz.points}px; font-weight:700; color:${text.points};">${escapeHtml(TEXT.points(Number(h.points) || 0))}</p>
           ${leader ? `<p style="margin:6px 0 0 0; font-family:${SANS}; font-size:10px; font-weight:600; ${track(TEXT.leading, 3)} color:${text.points};">&#9733; ${escapeHtml(TEXT.leading)}</p>` : ''}
         </div>
       </td>`;
@@ -706,6 +710,61 @@ function renderAwardsBlock(awards, topic, placeholders) {
     </table>
   </div>`;
 }
+
+/* ---------- Balancing the top block ---------- */
+
+// Rough desktop heights (px) of what sits in the top block's two columns,
+// tuned in Chrome with FiraGO. They only decide how many of the sections that
+// follow move up under the events when the principal's message is long, so a
+// few percent either way does not matter.
+const GEO_W_TEXT = 7.68; // Georgian, 13.5px light (the message)
+const LAT_W_TEXT = 6.02; // Latin, same
+const GEO_W_TITLE = 7.55; // Georgian, 13px semibold (event titles)
+const LAT_W_TITLE = 5.89;
+const WRAP = 0.93; // words never fill a line completely
+
+function textWidth(text, geoW, latW) {
+  let w = 0;
+  for (const ch of String(text || '')) w += GEORGIAN_RE.test(ch) ? geoW : latW;
+  return w;
+}
+
+function lineCount(text, width, geoW, latW) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .reduce((n, line) => n + Math.max(1, Math.ceil(textWidth(line, geoW, latW) / (width * WRAP))), 0);
+}
+
+function estimatePrincipalHeight(pm) {
+  let h = 44 + 3 + 16 + 6; // header bar, rule, body padding
+  for (const para of String(pm.body || '').split(/\r?\n\s*\r?\n/).filter((t) => t.trim())) {
+    h += lineCount(para, CARD_TEXT_W, GEO_W_TEXT, LAT_W_TEXT) * 22.3 + 12;
+  }
+  return h + (pm.photoUrl ? 40 : 0); // a portrait narrows the first lines
+}
+
+function estimateEventsHeight(events) {
+  const textW = COL_W - 2 - 24 - 2 - 54 - 24; // panel, card, date tile, padding => 212
+  let h = 23 + 65; // panel padding, heading (two lines in Georgian), list padding
+  let lastMonth = '';
+  for (const ev of events) {
+    const m = ev.event_date.slice(0, 7);
+    if (m !== lastMonth) {
+      lastMonth = m;
+      h += 32;
+    }
+    const title = lineCount(ev.title, textW, GEO_W_TITLE, LAT_W_TITLE) * 17.6;
+    const metaText = [ev.location, ev.time_note].filter(Boolean).join(' • ');
+    const meta = metaText ? 3 + lineCount(metaText, textW, GEO_W_TITLE * 0.85, LAT_W_TITLE * 0.85) * 15.4 : 0;
+    h += Math.max(56, 18 + title + meta) + 7;
+  }
+  return h;
+}
+
+// Column heights of the sections that can move up (measured, see above).
+const JOIN_COL_H = 640;
+const housesColHeight = (n) => 104 + Math.ceil(n / 2) * 152;
+const menusColHeight = (menus) => 144 + (Math.ceil(menus.length / 2) - 1) * 38;
 
 /* ---------- Footer ---------- */
 
@@ -839,7 +898,7 @@ function renderPartnersBlock(partners, placeholders, hidden) {
 // Georgian, to join Circle - the BGA community programme - with a button
 // straight to the registration form on circle.bga.ge (?join=1 opens it on
 // Register). On BGA blue with a white button - the brand book's two colours.
-function renderJoinCircleBlock(partners, placeholders, hidden) {
+function renderJoinCircleBlock(partners, placeholders, hidden, { column = false } = {}) {
   if (hidden) {
     return placeholders
       ? placeholderBox('J', 'Join Circle - hidden', 'Hidden from the newsletter - switch it back on under Settings.')
@@ -867,8 +926,8 @@ function renderJoinCircleBlock(partners, placeholders, hidden) {
   return `
   <div style="padding:2px 0 18px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; background:${BRAND}; border-top:3px solid ${ACCENT}; border-radius:14px;">
-      <tr><td style="padding:22px 24px 20px 24px;">
-        <h2 style="margin:0 0 10px 0; font-family:${SERIF}; font-size:24px; font-weight:800; line-height:1.25; color:#ffffff;">შემოუერთდით Circle-ს</h2>
+      <tr><td style="padding:${column ? '18px 16px 16px 16px' : '22px 24px 20px 24px'};">
+        <h2 style="margin:0 0 10px 0; font-family:${SERIF}; font-size:${column ? 21 : 24}px; font-weight:800; line-height:1.25; color:#ffffff;">შემოუერთდით Circle-ს</h2>
         <p style="margin:0 0 16px 0; font-family:${SANS}; font-size:14.5px; line-height:1.6; color:${ACCENT_SOFT};">Circle-ი BGA-ს მშობლებს, მოსწავლეებსა და გუნდს აერთიანებს. პროგრამა გთავაზობთ საერთო შეხვედრებსა და მასტერკლასებს თქვენ მიერ შერჩეულ თემებზე და სპეციალურ შეთავაზებებს 40-მდე პარტნიორ კომპანიაში.</p>
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${stepRows}</table>
         <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate; margin:10px 0 0 0;">
@@ -1024,6 +1083,46 @@ function renderNewsletter(data) {
         { framed: true }
       )}</div></td>`
     : `<td class="col" width="${COL_W}" valign="top">${principalHtml ? `<div class="desk-principal">${principalHtml}</div>` : '&nbsp;'}</td>`;
+  // A long principal's message leaves the events column short. The sections
+  // that follow the top block (Join Circle, House Points, School menus) then
+  // move up under the events, in their order, for as long as each one brings
+  // the two columns closer to the same length.
+  const sections = [
+    {
+      show: !data.joinCircleHidden,
+      h: JOIN_COL_H,
+      html: (col) => renderJoinCircleBlock(data.partners, placeholders, data.joinCircleHidden, { column: col }),
+    },
+    {
+      show: !data.housePointsHidden && (data.houses || []).length > 0,
+      h: housesColHeight((data.houses || []).length),
+      html: (col) => renderHousePointsBlock(data.houses, placeholders, data.housePointsHidden, { compact: col }),
+    },
+    {
+      show: (data.menus || []).length > 0,
+      h: menusColHeight(data.menus || []),
+      html: () => renderMenusBlock(data.menus, placeholders),
+    },
+  ];
+  if (events.length && principalMessage) {
+    const target = estimatePrincipalHeight(principalMessage);
+    let left = estimateEventsHeight(events);
+    for (const sec of sections) {
+      if (!sec.show) continue;
+      if (left + sec.h / 2 > target) break;
+      sec.up = true;
+      left += sec.h + 18;
+    }
+  }
+  const movedUp = sections.filter((sec) => sec.up);
+  const topEventsBody = renderEventsBlock(events, calendarUrl, editable, { framed: true });
+  const topEventsCellHtml = movedUp.length
+    ? `<td class="col" width="${COL_W}" valign="top"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;"><tr><td style="${topFrame(
+        EVENTS_PANEL
+      )} padding:14px 12px 7px 12px;">${topEventsBody}</td></tr></table><div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>${movedUp
+        .map((sec) => sec.html(true))
+        .join('')}</td>`
+    : topEventsCell;
   const topFramed = Boolean(events.length || principalMessage);
   const leftColumn = columnHtml(LEFT_SLOTS, articles, articleHtml, placeholders, articles);
   const rightColumn = columnHtml(RIGHT_SLOTS, articles, articleHtml, placeholders);
@@ -1139,15 +1238,16 @@ ${fontFaceCss(fontBase)}
              always come first, whatever the week's stories are. -->
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; border-spacing:0;">
           <tr>
-            ${topEventsCell}
+            ${topEventsCellHtml}
             <td class="gutter" width="16" style="font-size:0; line-height:0;">&nbsp;</td>
             ${topPrincipalCell}
           </tr>
         </table>
         ${topFramed ? '<div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>' : ''}
-        ${renderJoinCircleBlock(data.partners, placeholders, data.joinCircleHidden)}
-        ${renderHousePointsBlock(data.houses, placeholders, data.housePointsHidden)}
-        ${renderMenusBlock(data.menus, placeholders)}
+        ${sections
+          .filter((sec) => !sec.up)
+          .map((sec) => sec.html(false))
+          .join('')}
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
           <tr>
             <td class="col" width="${COL_W}" valign="top">${leftColumn || '&nbsp;'}</td>
@@ -1255,4 +1355,6 @@ module.exports = {
   textToHtml,
   PALETTE: { BRAND, BRAND_DEEP, ACCENT, ACCENT_DEEP, SHEET, INK },
   WIDTHS: { CARD_TEXT_W, PAIR_W },
+  // Height estimates for balancing the top block (exported for tests).
+  estimate: { principal: estimatePrincipalHeight, events: estimateEventsHeight },
 };
