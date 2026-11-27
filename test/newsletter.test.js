@@ -265,6 +265,17 @@ test('masthead background image renders email-safe with the brand-colour fallbac
   assert.match(editableEmpty, /data-masthead="1" data-no-bg="1"/);
 });
 
+test('top block: events and the principal message end on the same line', () => {
+  const html = renderNewsletter(baseData);
+  // Both columns are framed by their own table cells, which share the row's
+  // height - so neither card can end above the other.
+  const cells = html.match(/<td class="col[^"]*" width="318" valign="top" style="box-sizing:border-box;[^"]*border-radius:10px[^"]*">/g) || [];
+  assert.strictEqual(cells.length, 2, 'events and principal cells both framed');
+  assert.match(html, /border-collapse:separate;border-spacing:0/);
+  // The cards inside no longer draw their own outline or bottom gap.
+  assert.ok(!/border-top:none;border-radius:0 0 10px 10px;padding:16px 14px 6px 14px/.test(html.slice(html.indexOf('class="desk-principal"'))));
+});
+
 test('mobile: principal message stacks first, before events; desktop keeps it in the right column', () => {
   const html = renderNewsletter(baseData);
   const mob = html.indexOf('class="mob-principal"');
@@ -276,7 +287,9 @@ test('mobile: principal message stacks first, before events; desktop keeps it in
   // (The finished email drops the spaces inside inline styles.)
   assert.match(html, /class="mob-principal" style="display:none;max-height:0;overflow:hidden;mso-hide:all"/);
   assert.match(html, /\.mob-principal \{ display: block !important;/);
-  assert.match(html, /\.desk-principal \{ display: none !important; \}/);
+  // On phones the desktop copy hides together with the framed cell around it.
+  assert.match(html, /\.desk-principal, \.desk-principal-cell \{ display: none !important; \}/);
+  assert.match(html, /class="col desk-principal-cell"/);
   // No principal message and no placeholders -> neither copy renders (the
   // CSS rules stay in the stylesheet; only the class= usages disappear).
   const none = renderNewsletter({ ...baseData, principalMessage: null });

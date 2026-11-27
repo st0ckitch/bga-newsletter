@@ -26,6 +26,8 @@ const INK = palette.ink;
 const MUTED = palette.muted;
 const CARD_BORDER = palette.cardBorder;
 const BAR_COLORS = palette.barColors;
+// Behind the events list in the top block: the lightest tint of the accent.
+const EVENTS_PANEL = tint(ACCENT, 0.86);
 
 // Letter-spacing for a small label: the wide tracking that suits Latin
 // capitals pulls Georgian words apart, so Georgian stays close to normal.
@@ -101,7 +103,7 @@ const MOBILE_CSS = `
     .ph-row { width: 100% !important; }
     .ph-one { width: auto !important; max-width: 100% !important; max-height: 400px !important; }
     .mob-principal { display: block !important; max-height: none !important; overflow: visible !important; }
-    .desk-principal { display: none !important; }
+    .desk-principal, .desk-principal-cell { display: none !important; }
     .dir-table, .dir-table tbody, .dir-table tr { display: block !important; width: 100% !important; }
     .dir-cell { display: block !important; width: 100% !important; text-align: center !important; padding: 5px 0 !important; }
     .dir-fill { display: none !important; }
@@ -345,7 +347,7 @@ function renderEventRow(ev, editable) {
   </table>`;
 }
 
-function renderEventsBlock(events, calendarUrl, editable) {
+function renderEventsBlock(events, calendarUrl, editable, { framed = false } = {}) {
   if (!events.length) return '';
   const calendarChip = calendarUrl
     ? `<a href="${escapeHtml(
@@ -369,7 +371,7 @@ function renderEventsBlock(events, calendarUrl, editable) {
     rows += `<div style="padding:0 0 7px 0;">${renderEventRow(ev, editable)}</div>`;
   }
   return `
-  <div style="padding:0 0 18px 0;">
+  <div style="padding:${framed ? '0' : '0 0 18px 0'};">
     ${columnHeading(TEXT.saveTheDate, TEXT.upcomingEvents, calendarChip)}
     <div style="padding-top:8px;">${rows}</div>
   </div>`;
@@ -377,21 +379,24 @@ function renderEventsBlock(events, calendarUrl, editable) {
 
 /* ---------- Section C: Principal's Message ---------- */
 
-function renderPrincipalBlock(principalMessage, editable) {
+function renderPrincipalBlock(principalMessage, editable, { framed = false } = {}) {
   if (!principalMessage) return '';
   const week = principalMessage.weekStart || '';
   const canEdit = editable && week;
+  // Framed: the surrounding table cell draws the card's outline, so the card
+  // runs to the bottom of the row whatever sits beside it.
+  const bodyFrame = framed ? '' : ` border:1px solid ${CARD_BORDER}; border-top:none; border-radius:0 0 10px 10px;`;
   return `
-  <div style="padding:0 0 18px 0;">
+  <div style="padding:${framed ? '0' : '0 0 18px 0'};">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;">
       <tr>
-        <td style="background:${BRAND}; border-radius:10px 10px 0 0; padding:11px 14px;">
+        <td style="background:${BRAND}; border-radius:${framed ? '9px 9px' : '10px 10px'} 0 0; padding:11px 14px;">
           <p style="margin:0; font-family:${SANS}; font-size:13px; font-weight:600; ${track(TEXT.principalsMessage, 2)} color:#ffffff;">${escapeHtml(TEXT.principalsMessage)}</p>
         </td>
       </tr>
       <tr><td height="3" style="background:${ACCENT}; font-size:0; line-height:0;">&nbsp;</td></tr>
       <tr>
-        <td style="background:#ffffff; border:1px solid ${CARD_BORDER}; border-top:none; border-radius:0 0 10px 10px; padding:16px 14px 6px 14px;"${
+        <td style="background:#ffffff;${bodyFrame} padding:16px 14px 6px 14px;"${
     canEdit ? ` data-principal-week="${week}"${principalMessage.photoUrl ? '' : ' data-no-portrait="1"'}` : ''
   }>
           ${(() => {
@@ -999,6 +1004,27 @@ function renderNewsletter(data) {
   const mobilePrincipal = principalHtml
     ? `<div class="mob-principal" style="display:none; max-height:0; overflow:hidden; mso-hide:all;">${principalHtml}</div>`
     : '';
+  // The two columns of the top block are framed by their table cells, which
+  // share the row's height: the events panel and the principal's card always
+  // end on the same line, however long the message or the events list.
+  const topFrame = (bg) =>
+    `box-sizing:border-box; background:${bg}; border:1px solid ${CARD_BORDER}; border-radius:10px;`;
+  const topEventsCell = events.length
+    ? `<td class="col" width="${COL_W}" valign="top" style="${topFrame(EVENTS_PANEL)} padding:14px 12px 7px 12px;">${renderEventsBlock(
+        events,
+        calendarUrl,
+        editable,
+        { framed: true }
+      )}</td>`
+    : `<td class="col" width="${COL_W}" valign="top">${eventsHtml || '&nbsp;'}</td>`;
+  const topPrincipalCell = principalMessage
+    ? `<td class="col desk-principal-cell" width="${COL_W}" valign="top" style="${topFrame('#ffffff')}"><div class="desk-principal">${renderPrincipalBlock(
+        principalMessage,
+        editable,
+        { framed: true }
+      )}</div></td>`
+    : `<td class="col" width="${COL_W}" valign="top">${principalHtml ? `<div class="desk-principal">${principalHtml}</div>` : '&nbsp;'}</td>`;
+  const topFramed = Boolean(events.length || principalMessage);
   const leftColumn = columnHtml(LEFT_SLOTS, articles, articleHtml, placeholders, articles);
   const rightColumn = columnHtml(RIGHT_SLOTS, articles, articleHtml, placeholders);
 
@@ -1111,13 +1137,14 @@ ${fontFaceCss(fontBase)}
         ${mobilePrincipal}
         <!-- Fixed top block: the events calendar and the principal's message
              always come first, whatever the week's stories are. -->
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; border-spacing:0;">
           <tr>
-            <td class="col" width="${COL_W}" valign="top">${eventsHtml || '&nbsp;'}</td>
+            ${topEventsCell}
             <td class="gutter" width="16" style="font-size:0; line-height:0;">&nbsp;</td>
-            <td class="col" width="${COL_W}" valign="top">${principalHtml ? `<div class="desk-principal">${principalHtml}</div>` : '&nbsp;'}</td>
+            ${topPrincipalCell}
           </tr>
         </table>
+        ${topFramed ? '<div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>' : ''}
         ${renderJoinCircleBlock(data.partners, placeholders, data.joinCircleHidden)}
         ${renderHousePointsBlock(data.houses, placeholders, data.housePointsHidden)}
         ${renderMenusBlock(data.menus, placeholders)}
